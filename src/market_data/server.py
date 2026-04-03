@@ -26,6 +26,15 @@ from market_data.exceptions import (
     MarketDataError,
     TickerNotFoundError,
 )
+from market_data.schemas import (
+    ClosePoint,
+    ErrorResponse,
+    HealthResponse,
+    LatestQuote,
+    OHLCVBar,
+    ReadyResponse,
+    TickerStatus,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -127,12 +136,12 @@ async def market_data_error_handler(_request: Request, exc: MarketDataError) -> 
     return JSONResponse(status_code=500, content={"error": str(exc)})
 
 
-@app.get("/health")
+@app.get("/health", response_model=HealthResponse)
 def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@app.get("/ready")
+@app.get("/ready", response_model=ReadyResponse)
 def ready() -> dict[str, object]:
     from market_data.config import DATA_DIR
 
@@ -145,7 +154,7 @@ def ready() -> dict[str, object]:
     }
 
 
-def _ohlcv_records(df: pd.DataFrame) -> list[dict[str, object]]:
+def _ohlcv_records(df: pd.DataFrame) -> list[OHLCVBar]:
     if df.empty:
         return []
 
@@ -159,20 +168,20 @@ def _ohlcv_records(df: pd.DataFrame) -> list[dict[str, object]]:
     volumes = df["Volume"].astype(int).tolist()
 
     return [
-        {
-            "date": dates[i],
-            "time": unix_ts[i],
-            "open": float(opens[i]),
-            "high": float(highs[i]),
-            "low": float(lows[i]),
-            "close": float(closes[i]),
-            "volume": volumes[i],
-        }
+        OHLCVBar(
+            date=dates[i],
+            time=unix_ts[i],
+            open=float(opens[i]),
+            high=float(highs[i]),
+            low=float(lows[i]),
+            close=float(closes[i]),
+            volume=volumes[i],
+        )
         for i in range(len(df))
     ]
 
 
-def _close_records(df: pd.DataFrame) -> list[dict[str, object]]:
+def _close_records(df: pd.DataFrame) -> list[ClosePoint]:
     if df.empty:
         return []
 
@@ -182,27 +191,27 @@ def _close_records(df: pd.DataFrame) -> list[dict[str, object]]:
     closes = df["Close"].round(4).tolist()
 
     return [
-        {
-            "date": dates[i].isoformat(),
-            "time": unix_ts[i],
-            "close": float(closes[i]),
-        }
+        ClosePoint(
+            date=dates[i].isoformat(),
+            time=unix_ts[i],
+            close=float(closes[i]),
+        )
         for i in range(len(df))
     ]
 
 
-@v1.get("/tickers")
+@v1.get("/tickers", response_model=list[TickerStatus])
 async def get_tickers() -> list[dict[str, object]]:
     return await asyncio.to_thread(store.status)
 
 
-@v1.get("/ohlcv/{ticker}")
+@v1.get("/ohlcv/{ticker}", response_model=list[OHLCVBar])
 async def get_ohlcv(
     ticker: str,
     days: int = Query(default=365, ge=1, le=3650),
     limit: int = Query(default=0, ge=0, le=10000),
     offset: int = Query(default=0, ge=0),
-) -> list[dict[str, object]]:
+) -> list[OHLCVBar]:
     df = await asyncio.to_thread(store.load, ticker, days)
     records = _ohlcv_records(df)
     if offset:
@@ -212,19 +221,19 @@ async def get_ohlcv(
     return records
 
 
-@v1.get("/latest/{ticker}")
+@v1.get("/latest/{ticker}", response_model=LatestQuote | None)
 async def get_latest(ticker: str) -> dict[str, object] | None:
     from market_data.api import get_latest as _get_latest
 
     return await asyncio.to_thread(_get_latest, ticker)
 
 
-@v1.get("/compare")
+@v1.get("/compare", response_model=dict[str, list[ClosePoint]])
 async def get_compare(
     tickers: str = Query(description="Comma-separated tickers, e.g. QQQ,XOM,CRM"),
     days: int = Query(default=90, ge=1, le=3650),
-) -> dict[str, list[dict[str, object]]]:
-    result: dict[str, list[dict[str, object]]] = {}
+) -> dict[str, list[ClosePoint]]:
+    result: dict[str, list[ClosePoint]] = {}
     for t in tickers.split(","):
         t = t.strip()
         if not t:

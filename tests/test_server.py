@@ -34,6 +34,15 @@ class TestHealth:
         assert body["ticker_count"] == 1
 
 
+_MOCK_TICKER_STATUS = {
+    "ticker": "AAPL",
+    "rows": 5,
+    "first_date": "2025-01-01",
+    "last_date": "2025-01-05",
+    "size_kb": 1.2,
+}
+
+
 class TestGetTickers:
     def test_returns_list(self, tmp_path, sample_ohlcv) -> None:
         from market_data import store
@@ -41,7 +50,7 @@ class TestGetTickers:
         df = sample_ohlcv(days=5)
         store.save("AAPL", df, data_dir=tmp_path)
 
-        with patch("market_data.server.store.status", return_value=[{"ticker": "AAPL", "rows": 5}]):
+        with patch("market_data.server.store.status", return_value=[_MOCK_TICKER_STATUS]):
             resp = client.get("/api/tickers")
 
         assert resp.status_code == 200
@@ -55,7 +64,7 @@ class TestGetTickers:
         df = sample_ohlcv(days=5)
         store.save("AAPL", df, data_dir=tmp_path)
 
-        with patch("market_data.server.store.status", return_value=[{"ticker": "AAPL", "rows": 5}]):
+        with patch("market_data.server.store.status", return_value=[_MOCK_TICKER_STATUS]):
             resp = client.get("/api/v1/tickers")
 
         assert resp.status_code == 200
