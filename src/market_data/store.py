@@ -6,14 +6,43 @@ Ticker sanitization: "^VIX" -> "VIX", "/" -> "_".
 from __future__ import annotations
 
 import logging
+import re
+import tempfile
+import threading
+import time
 from datetime import date
 from pathlib import Path
 
 import pandas as pd
 
 from market_data.config import DATA_DIR
+from market_data.exceptions import InvalidTickerError
 
 logger = logging.getLogger(__name__)
+
+CACHE_TTL_SECONDS = 60
+_cache: dict[str, tuple[float, pd.DataFrame]] = {}
+_cache_lock = threading.Lock()
+
+# Alphanumeric, ^, -, ., / (caret for ^VIX, slash for BRK/B, dot for BRK.B)
+_TICKER_PATTERN = re.compile(r"^[\w\^./\\-]{1,20}$")
+
+
+def validate_ticker(ticker: str) -> str:
+    """Validate and sanitize a ticker symbol.
+
+    Raises InvalidTickerError for empty, too long, or invalid-character tickers.
+    Returns the sanitized (uppercase, safe-for-filename) ticker.
+    """
+    if not ticker or not ticker.strip():
+        raise InvalidTickerError(ticker, "Ticker symbol cannot be empty")
+
+    ticker = ticker.strip()
+
+    if not _TICKER_PATTERN.match(ticker):
+        raise InvalidTickerError(ticker, "Only alphanumeric, ^, -, ., / characters allowed (max 20 chars).")
+
+    return _sanitize_ticker(ticker)
 
 
 def _sanitize_ticker(ticker: str) -> str:
@@ -21,7 +50,26 @@ def _sanitize_ticker(ticker: str) -> str:
 
 
 def _parquet_path(ticker: str, data_dir: Path = DATA_DIR) -> Path:
-    return data_dir / f"{_sanitize_ticker(ticker)}.parquet"
+    safe_name = validate_ticker(ticker)
+    path = (data_dir / f"{safe_name}.parquet").resolve()
+
+    # Path traversal defense: ensure resolved path is inside data_dir
+    if not str(path).startswith(str(data_dir.resolve())):
+        raise InvalidTickerError(ticker, "Path traversal detected")
+
+    return path
+
+
+def invalidate_cache(ticker: str | None = None) -> None:
+    """Clear cached DataFrames. Pass ticker to clear one, or None to clear all."""
+    with _cache_lock:
+        if ticker is None:
+            _cache.clear()
+        else:
+            safe = validate_ticker(ticker)
+            keys = [k for k in _cache if k.startswith(safe + ":")]
+            for k in keys:
+                del _cache[k]
 
 
 def save(ticker: str, df: pd.DataFrame, data_dir: Path = DATA_DIR) -> int:
@@ -31,15 +79,28 @@ def save(ticker: str, df: pd.DataFrame, data_dir: Path = DATA_DIR) -> int:
 
     if path.exists():
         existing = pd.read_parquet(path)
+        rows_before = len(existing)
         combined = pd.concat([existing, df])
     else:
+        rows_before = 0
         combined = df.copy()
 
     combined = combined[~combined.index.duplicated(keep="last")]
     combined.sort_index(inplace=True)
 
-    rows_before = len(pd.read_parquet(path)) if path.exists() else 0
-    combined.to_parquet(path, engine="pyarrow")
+    # Atomic write: write to temp file then rename to avoid partial writes
+    tmp_fd, tmp_path = tempfile.mkstemp(dir=data_dir, suffix=".parquet.tmp")
+    try:
+        import os
+
+        os.close(tmp_fd)
+        combined.to_parquet(tmp_path, engine="pyarrow")
+        Path(tmp_path).replace(path)
+    except BaseException:
+        Path(tmp_path).unlink(missing_ok=True)
+        raise
+
+    invalidate_cache(ticker)
     rows_added = len(combined) - rows_before
     logger.info("%s: saved %d rows (total %d)", ticker, rows_added, len(combined))
     return rows_added
@@ -52,7 +113,21 @@ def load(ticker: str, days: int | None = None, data_dir: Path = DATA_DIR) -> pd.
         logger.warning("%s: no local data at %s", ticker, path)
         return pd.DataFrame()
 
-    df = pd.read_parquet(path)
+    safe = validate_ticker(ticker)
+    cache_key = f"{safe}:{data_dir}"
+
+    with _cache_lock:
+        if cache_key in _cache:
+            ts, cached_df = _cache[cache_key]
+            if time.monotonic() - ts < CACHE_TTL_SECONDS:
+                df = cached_df
+            else:
+                del _cache[cache_key]
+                df = pd.read_parquet(path)
+                _cache[cache_key] = (time.monotonic(), df)
+        else:
+            df = pd.read_parquet(path)
+            _cache[cache_key] = (time.monotonic(), df)
 
     if days is not None:
         cutoff = pd.Timestamp(date.today()) - pd.Timedelta(days=days)
