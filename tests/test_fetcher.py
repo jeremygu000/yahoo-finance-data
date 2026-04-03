@@ -1,150 +1,94 @@
-import pytest
+from __future__ import annotations
+
+from datetime import date
+from unittest.mock import patch, MagicMock
+
 import pandas as pd
-from unittest.mock import Mock, patch, MagicMock
-from market_data.fetcher import fetch_batch, _clean_df
+
+from market_data.fetcher import fetch_batch
+from market_data.providers.base import MarketDataProvider
+
+
+def _make_ohlcv(rows: int = 2) -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "Open": [100.0 + i for i in range(rows)],
+            "High": [102.0 + i for i in range(rows)],
+            "Low": [99.0 + i for i in range(rows)],
+            "Close": [101.0 + i for i in range(rows)],
+            "Volume": [1000000 + i * 100000 for i in range(rows)],
+        },
+        index=pd.date_range("2024-01-01", periods=rows),
+    )
+
+
+class _FakeProvider(MarketDataProvider):
+    def __init__(self, name: str, available: bool, data: dict[str, pd.DataFrame] | None = None) -> None:
+        self._name = name
+        self._available = available
+        self._data = data or {}
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    def is_available(self) -> bool:
+        return self._available
+
+    def fetch_ohlcv(self, ticker: str, start: date, end: date) -> pd.DataFrame:
+        return self._data.get(ticker, pd.DataFrame())
+
+    def fetch_batch(self, tickers: list[str], start: date, end: date) -> dict[str, pd.DataFrame]:
+        return {t: self._data[t] for t in tickers if t in self._data}
 
 
 class TestFetchBatch:
-    def test_fetch_batch_empty_tickers(self):
-        result = fetch_batch([])
-        assert result == {}
+    def test_empty_tickers(self) -> None:
+        assert fetch_batch([]) == {}
 
-    def test_fetch_batch_success(self):
-        ticker1_data = pd.DataFrame(
-            {
-                "Open": [100.0, 101.0],
-                "High": [102.0, 103.0],
-                "Low": [99.0, 100.0],
-                "Close": [101.0, 102.0],
-                "Volume": [1000000, 1100000],
-            },
-            index=pd.date_range("2024-01-01", periods=2),
-        )
+    @patch("market_data.fetcher.get_fallback_chain")
+    def test_primary_returns_all(self, mock_chain: MagicMock) -> None:
+        primary = _FakeProvider("test", True, {"AAPL": _make_ohlcv(), "GOOG": _make_ohlcv()})
+        mock_chain.return_value = [primary]
 
-        ticker2_data = pd.DataFrame(
-            {
-                "Open": [200.0, 201.0],
-                "High": [202.0, 203.0],
-                "Low": [199.0, 200.0],
-                "Close": [201.0, 202.0],
-                "Volume": [2000000, 2100000],
-            },
-            index=pd.date_range("2024-01-01", periods=2),
-        )
+        result = fetch_batch(["AAPL", "GOOG"], start=date(2024, 1, 1), end=date(2024, 12, 31))
 
-        mock_data = pd.concat({"AAPL": ticker1_data, "GOOG": ticker2_data}, axis=1, keys=["AAPL", "GOOG"])
-
-        with patch("market_data.fetcher.yf.download", return_value=mock_data):
-            result = fetch_batch(["AAPL", "GOOG"])
-
-        assert "AAPL" in result
-        assert "GOOG" in result
+        assert set(result.keys()) == {"AAPL", "GOOG"}
         assert len(result["AAPL"]) == 2
-        assert len(result["GOOG"]) == 2
-        assert list(result["AAPL"].columns) == ["Open", "High", "Low", "Close", "Volume"]
 
-    def test_fetch_batch_retry_on_exception(self):
-        ticker_data = pd.DataFrame(
-            {
-                "Open": [100.0],
-                "High": [102.0],
-                "Low": [99.0],
-                "Close": [101.0],
-                "Volume": [1000000],
-            },
-            index=pd.date_range("2024-01-01", periods=1),
-        )
+    @patch("market_data.fetcher.get_fallback_chain")
+    def test_fallback_fills_missing(self, mock_chain: MagicMock) -> None:
+        primary = _FakeProvider("primary", True, {"AAPL": _make_ohlcv()})
+        fallback = _FakeProvider("fallback", True, {"GOOG": _make_ohlcv()})
+        mock_chain.return_value = [primary, fallback]
 
-        mock_data = pd.concat({"AAPL": ticker_data}, axis=1, keys=["AAPL"])
+        result = fetch_batch(["AAPL", "GOOG"], start=date(2024, 1, 1), end=date(2024, 12, 31))
 
-        mock_download = Mock(side_effect=[Exception("Network error"), Exception("Timeout"), mock_data])
+        assert set(result.keys()) == {"AAPL", "GOOG"}
 
-        with patch("market_data.fetcher.yf.download", mock_download):
-            with patch("market_data.fetcher.time.sleep"):
-                result = fetch_batch(["AAPL"])
+    @patch("market_data.fetcher.get_fallback_chain")
+    def test_no_providers_available(self, mock_chain: MagicMock) -> None:
+        mock_chain.return_value = []
 
-        assert "AAPL" in result
-        assert mock_download.call_count == 3
-
-    def test_fetch_batch_all_retries_exhausted(self):
-        mock_download = Mock(side_effect=Exception("Persistent error"))
-
-        with patch("market_data.fetcher.yf.download", mock_download):
-            with patch("market_data.fetcher.time.sleep"):
-                result = fetch_batch(["AAPL"])
+        result = fetch_batch(["AAPL"], start=date(2024, 1, 1), end=date(2024, 12, 31))
 
         assert result == {}
 
-    def test_clean_df_empty(self):
-        empty_df = pd.DataFrame()
-        result = _clean_df(empty_df)
-        assert result is None
+    @patch("market_data.fetcher.get_fallback_chain")
+    def test_all_providers_miss_ticker(self, mock_chain: MagicMock) -> None:
+        primary = _FakeProvider("primary", True, {})
+        fallback = _FakeProvider("fallback", True, {})
+        mock_chain.return_value = [primary, fallback]
 
-    def test_clean_df_with_data(self):
-        df = pd.DataFrame(
-            {
-                "Open": [100.0, 101.0],
-                "High": [102.0, 103.0],
-                "Low": [99.0, 100.0],
-                "Close": [101.0, 102.0],
-                "Volume": [1000000, 1100000],
-            },
-            index=pd.date_range("2024-01-01", periods=2),
-        )
+        result = fetch_batch(["MISSING"], start=date(2024, 1, 1), end=date(2024, 12, 31))
 
-        result = _clean_df(df)
-        assert result is not None
-        assert len(result) == 2
-        assert list(result.columns) == ["Open", "High", "Low", "Close", "Volume"]
-        assert result.index.name == "Date"
+        assert result == {}
 
-    def test_clean_df_with_multiindex(self):
-        arrays = [
-            ["Open", "High", "Low", "Close", "Volume"],
-            ["AAPL"] * 5,
-        ]
-        columns = pd.MultiIndex.from_arrays(arrays)
-        df = pd.DataFrame(
-            [[100.0, 102.0, 99.0, 101.0, 1000000], [101.0, 103.0, 100.0, 102.0, 1100000]],
-            columns=columns,
-            index=pd.date_range("2024-01-01", periods=2),
-        )
+    @patch("market_data.fetcher.get_fallback_chain")
+    def test_defaults_start_end_when_none(self, mock_chain: MagicMock) -> None:
+        primary = _FakeProvider("test", True, {"AAPL": _make_ohlcv()})
+        mock_chain.return_value = [primary]
 
-        result = _clean_df(df)
-        assert result is not None
-        assert list(result.columns) == ["Open", "High", "Low", "Close", "Volume"]
+        result = fetch_batch(["AAPL"])
 
-    def test_clean_df_none_input(self):
-        result = _clean_df(None)
-        assert result is None
-
-    def test_clean_df_all_na(self):
-        df = pd.DataFrame(
-            {
-                "Open": [None, None],
-                "High": [None, None],
-                "Low": [None, None],
-                "Close": [None, None],
-                "Volume": [None, None],
-            },
-            index=pd.date_range("2024-01-01", periods=2),
-        )
-
-        result = _clean_df(df)
-        assert result is None
-
-    def test_clean_df_non_numeric_index(self):
-        df = pd.DataFrame(
-            {
-                "Open": [100.0],
-                "High": [102.0],
-                "Low": [99.0],
-                "Close": [101.0],
-                "Volume": [1000000],
-            },
-            index=["2024-01-01"],
-        )
-
-        result = _clean_df(df)
-        assert result is not None
-        assert isinstance(result.index, pd.DatetimeIndex)
+        assert "AAPL" in result
