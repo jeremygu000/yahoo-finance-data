@@ -12,7 +12,7 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 import pandas as pd
-from fastapi import FastAPI, Query, Request
+from fastapi import FastAPI, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.responses import Response
@@ -20,7 +20,7 @@ from starlette.responses import Response
 from fastapi.routing import APIRouter
 
 from market_data import store
-from market_data.config import CORS_ORIGINS
+from market_data.config import CORS_ORIGINS, WS_POLL_INTERVAL
 from market_data.exceptions import (
     InvalidTickerError,
     MarketDataError,
@@ -32,8 +32,10 @@ from market_data.schemas import (
     HealthResponse,
     LatestQuote,
     OHLCVBar,
+    PriceUpdate,
     ReadyResponse,
     TickerStatus,
+    WSMessage,
 )
 
 logger = logging.getLogger(__name__)
@@ -41,6 +43,8 @@ logger = logging.getLogger(__name__)
 RATE_LIMIT_REQUESTS = 60
 RATE_LIMIT_WINDOW = 60
 _request_log: dict[str, collections.deque[float]] = {}
+_ws_clients: set[WebSocket] = set()
+_price_task: asyncio.Task[None] | None = None
 
 
 def _is_rate_limited(client_ip: str) -> bool:
@@ -58,14 +62,27 @@ def _is_rate_limited(client_ip: str) -> bool:
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    global _price_task
     from market_data.config import DATA_DIR
+    from market_data.logging_config import setup_logging
 
+    setup_logging()
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-    logger.info("Market Data API starting — data_dir=%s", DATA_DIR)
+    logger.info("server starting", extra={"path": str(DATA_DIR)})
+    _price_task = asyncio.create_task(_poll_prices())
     yield
+    if _price_task is not None:
+        _price_task.cancel()
+        try:
+            await _price_task
+        except asyncio.CancelledError:
+            pass
+    for ws in list(_ws_clients):
+        await ws.close()
+    _ws_clients.clear()
     store.invalidate_cache()
     _request_log.clear()
-    logger.info("Market Data API shutting down")
+    logger.info("server shutting down")
 
 
 app = FastAPI(title="Market Data API", version="0.1.0", lifespan=lifespan)
@@ -96,23 +113,36 @@ async def logging_and_error_middleware(request: Request, call_next: Any) -> Resp
         response: Response = await call_next(request)
         elapsed_ms = (time.monotonic() - start) * 1000
         logger.info(
-            "%s %s -> %d (%.1fms) [%s]",
+            "%s %s -> %d",
             request.method,
             request.url.path,
             response.status_code,
-            elapsed_ms,
-            request_id,
+            extra={
+                "request_id": request_id,
+                "method": request.method,
+                "path": request.url.path,
+                "status_code": response.status_code,
+                "latency_ms": round(elapsed_ms, 1),
+                "client_ip": client_ip,
+            },
         )
         response.headers["X-Request-ID"] = request_id
         return response
     except Exception:
         elapsed_ms = (time.monotonic() - start) * 1000
         logger.exception(
-            "%s %s -> 500 (%.1fms) [%s] unhandled error",
+            "%s %s -> 500 unhandled error",
             request.method,
             request.url.path,
-            elapsed_ms,
-            request_id,
+            extra={
+                "request_id": request_id,
+                "method": request.method,
+                "path": request.url.path,
+                "status_code": 500,
+                "latency_ms": round(elapsed_ms, 1),
+                "client_ip": client_ip,
+                "error_type": "unhandled",
+            },
         )
         return JSONResponse(
             status_code=500,
@@ -132,8 +162,55 @@ async def ticker_not_found_handler(_request: Request, exc: TickerNotFoundError) 
 
 @app.exception_handler(MarketDataError)
 async def market_data_error_handler(_request: Request, exc: MarketDataError) -> JSONResponse:
-    logger.error("MarketDataError: %s", exc)
+    logger.error("MarketDataError: %s", exc, extra={"error_type": type(exc).__name__})
     return JSONResponse(status_code=500, content={"error": str(exc)})
+
+
+async def _broadcast(msg: WSMessage) -> None:
+    payload = msg.model_dump_json()
+    dead: list[WebSocket] = []
+    for ws in _ws_clients:
+        try:
+            await ws.send_text(payload)
+        except Exception:
+            dead.append(ws)
+    for ws in dead:
+        _ws_clients.discard(ws)
+
+
+async def _poll_prices() -> None:
+    from market_data.api import get_latest as _get_latest
+
+    while True:
+        await asyncio.sleep(WS_POLL_INTERVAL)
+        if not _ws_clients:
+            continue
+        tickers = await asyncio.to_thread(store.list_tickers)
+        if not tickers:
+            continue
+        updates: list[PriceUpdate] = []
+        for t in tickers:
+            row = await asyncio.to_thread(_get_latest, t)
+            if row:
+                row["ticker"] = t
+                updates.append(PriceUpdate.model_validate(row))
+        if updates:
+            await _broadcast(WSMessage(type="price_update", data=updates))
+
+
+@app.websocket("/ws/prices")
+async def ws_prices(ws: WebSocket) -> None:
+    await ws.accept()
+    _ws_clients.add(ws)
+    logger.info("ws client connected", extra={"client_ip": ws.client.host if ws.client else "unknown"})
+    try:
+        while True:
+            await ws.receive_text()
+    except WebSocketDisconnect:
+        pass
+    finally:
+        _ws_clients.discard(ws)
+        logger.info("ws client disconnected")
 
 
 @app.get("/health", response_model=HealthResponse)

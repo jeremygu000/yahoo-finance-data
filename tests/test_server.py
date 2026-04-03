@@ -231,3 +231,44 @@ class TestRateLimit:
         assert resp.json()["error"] == "Rate limit exceeded"
         assert "retry-after" in resp.headers
         _request_log.clear()
+
+
+class TestWebSocket:
+    def test_ws_connect_and_disconnect(self) -> None:
+        with client.websocket_connect("/ws/prices") as ws:
+            assert ws is not None
+
+    def test_ws_receives_price_update(self) -> None:
+        import json
+
+        mock_latest = {
+            "date": "2025-01-01",
+            "open": 100.0,
+            "high": 105.0,
+            "low": 99.0,
+            "close": 104.0,
+            "volume": 1000,
+        }
+
+        with client.websocket_connect("/ws/prices") as ws:
+            with (
+                patch("market_data.server.store.list_tickers", return_value=["AAPL"]),
+                patch("market_data.api.get_latest", return_value=mock_latest),
+            ):
+                from market_data.server import _ws_clients, _broadcast, WSMessage, PriceUpdate
+
+                import asyncio
+
+                update = PriceUpdate(
+                    ticker="AAPL", date="2025-01-01", open=100.0, high=105.0, low=99.0, close=104.0, volume=1000
+                )
+                msg = WSMessage(type="price_update", data=[update])
+                loop = asyncio.new_event_loop()
+                loop.run_until_complete(_broadcast(msg))
+                loop.close()
+
+            data = ws.receive_json()
+            assert data["type"] == "price_update"
+            assert len(data["data"]) == 1
+            assert data["data"][0]["ticker"] == "AAPL"
+            assert data["data"][0]["close"] == 104.0

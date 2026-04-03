@@ -49,3 +49,18 @@ class ReadyResponse(BaseModel):
 class ErrorResponse(BaseModel):
     error: str
     request_id: str | None = None
+
+
+class PriceUpdate(BaseModel):
+    ticker: str
+    date: str
+    open: float
+    high: float
+    low: float
+    close: float
+    volume: int
+
+
+class WSMessage(BaseModel):
+    type: str
+    data: list[PriceUpdate] | str

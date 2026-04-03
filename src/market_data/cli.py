@@ -7,16 +7,10 @@ from datetime import date, timedelta
 
 from market_data.config import DEFAULT_TICKERS, LOOKBACK_DAYS, MIN_ROLLING_DAYS
 from market_data.fetcher import fetch_batch
+from market_data.logging_config import setup_logging
 from market_data.store import clean, last_date, save, status
 
-
-def _setup_logging(verbose: bool = False) -> None:
-    level = logging.DEBUG if verbose else logging.INFO
-    logging.basicConfig(
-        level=level,
-        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-    )
+logger = logging.getLogger(__name__)
 
 
 def cmd_fetch(args: argparse.Namespace) -> None:
@@ -109,7 +103,7 @@ def main() -> None:
     p_clean.add_argument("--keep-days", type=int, default=365, help="Keep data within N days")
 
     args = parser.parse_args()
-    _setup_logging(args.verbose)
+    setup_logging(json_format=False, level=logging.DEBUG if args.verbose else logging.INFO)
 
     commands = {
         "fetch": cmd_fetch,

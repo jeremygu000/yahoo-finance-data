@@ -23,3 +23,5 @@ _default_cors = "http://localhost:3000,http://127.0.0.1:3000"
 CORS_ORIGINS: list[str] = [
     o.strip() for o in os.environ.get("MARKET_DATA_CORS_ORIGINS", _default_cors).split(",") if o.strip()
 ]
+
+WS_POLL_INTERVAL = int(os.environ.get("MARKET_DATA_WS_POLL_INTERVAL", "30"))

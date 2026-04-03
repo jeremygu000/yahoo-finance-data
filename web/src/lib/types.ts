@@ -33,6 +33,21 @@ export interface ComparePoint {
 
 export type CompareData = Record<string, ComparePoint[]>;
 
+export interface PriceUpdate {
+  ticker: string;
+  date: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
+export interface WSMessage {
+  type: "price_update" | "error";
+  data: PriceUpdate[] | string;
+}
+
 export type SortDirection = "asc" | "desc";
 
 export type SortColumn = "date" | "open" | "high" | "low" | "close" | "volume";
