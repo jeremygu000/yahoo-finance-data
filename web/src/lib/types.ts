@@ -58,10 +58,7 @@ export function getVixZone(value: number): VixZone {
   return "extreme";
 }
 
-export const VIX_ZONE_CONFIG: Record<
-  VixZone,
-  { label: string; color: string; bg: string; border: string }
-> = {
+export const VIX_ZONE_CONFIG: Record<VixZone, { label: string; color: string; bg: string; border: string }> = {
   low: {
     label: "Low Volatility",
     color: "#00ff88",

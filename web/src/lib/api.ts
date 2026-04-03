@@ -16,10 +16,7 @@ export async function fetchTickers(): Promise<TickerInfo[]> {
   return fetcher<TickerInfo[]>("/api/tickers");
 }
 
-export async function fetchOHLCV(
-  ticker: string,
-  days = 365,
-): Promise<OHLCVBar[]> {
+export async function fetchOHLCV(ticker: string, days = 365): Promise<OHLCVBar[]> {
   return fetcher<OHLCVBar[]>(`/api/ohlcv/${ticker}?days=${days}`);
 }
 
@@ -27,11 +24,6 @@ export async function fetchLatest(ticker: string): Promise<LatestQuote | null> {
   return fetcher<LatestQuote | null>(`/api/latest/${ticker}`);
 }
 
-export async function fetchCompare(
-  tickers: string[],
-  days = 90,
-): Promise<CompareData> {
-  return fetcher<CompareData>(
-    `/api/compare?tickers=${tickers.join(",")}&days=${days}`,
-  );
+export async function fetchCompare(tickers: string[], days = 90): Promise<CompareData> {
+  return fetcher<CompareData>(`/api/compare?tickers=${tickers.join(",")}&days=${days}`);
 }

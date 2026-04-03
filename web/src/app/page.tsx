@@ -1,4 +1,9 @@
+import Box from "@mui/material/Box";
+import Typography from "@mui/material/Typography";
+import Divider from "@mui/material/Divider";
+import Chip from "@mui/material/Chip";
 import Sidebar from "@/components/Sidebar";
+import HeroBanner from "@/components/HeroBanner";
 import TickerOverview from "@/components/TickerOverview";
 import CandlestickChart from "@/components/CandlestickChart";
 import PriceComparison from "@/components/PriceComparison";
@@ -7,46 +12,69 @@ import VixDashboard from "@/components/VixDashboard";
 
 function SectionHeader({ num, title }: { num: string; title: string }) {
   return (
-    <div className="section-header">
-      <span className="section-number">{num}</span>
-      <h2>{title}</h2>
-      <span className="section-divider" />
-    </div>
+    <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mb: 3 }}>
+      <Chip
+        label={num}
+        size="small"
+        sx={{
+          fontFamily: "var(--font-geist-mono)",
+          fontSize: "0.7rem",
+          fontWeight: 700,
+          bgcolor: "primary.main",
+          color: "white",
+          height: 22,
+          borderRadius: "6px",
+        }}
+      />
+      <Typography variant="h6" sx={{ fontWeight: 600, fontSize: "1rem", color: "text.primary" }}>
+        {title}
+      </Typography>
+      <Divider sx={{ flex: 1, borderColor: "divider" }} />
+    </Box>
   );
 }
 
 export default function Home() {
   return (
-    <div className="flex h-full">
+    <Box sx={{ display: "flex", minHeight: "100vh", bgcolor: "background.default" }}>
       <Sidebar />
-      <main className="flex-1 ml-56 overflow-y-auto h-screen">
-        <div className="max-w-6xl mx-auto px-8 py-8 space-y-16">
-          <section id="overview" className="scroll-mt-8">
+      <Box
+        component="main"
+        sx={{
+          flex: 1,
+          overflowY: "auto",
+          height: "100vh",
+        }}
+      >
+        <HeroBanner />
+
+        <Box sx={{ maxWidth: 1100, mx: "auto", px: 4, py: 5, display: "flex", flexDirection: "column", gap: 6 }}>
+          <Box component="section" id="overview" sx={{ scrollMarginTop: 32 }}>
             <SectionHeader num="01" title="Ticker Overview" />
             <TickerOverview />
-          </section>
+          </Box>
 
-          <section id="candlestick" className="scroll-mt-8">
+          <Box component="section" id="candlestick" sx={{ scrollMarginTop: 32 }}>
             <SectionHeader num="02" title="Candlestick Chart" />
             <CandlestickChart />
-          </section>
+          </Box>
 
-          <section id="comparison" className="scroll-mt-8">
+          <Box component="section" id="comparison" sx={{ scrollMarginTop: 32 }}>
             <SectionHeader num="03" title="Price Comparison" />
             <PriceComparison />
-          </section>
+          </Box>
 
-          <section id="table" className="scroll-mt-8">
+          <Box component="section" id="table" sx={{ scrollMarginTop: 32 }}>
             <SectionHeader num="04" title="OHLCV Data Table" />
             <DataTable />
-          </section>
+          </Box>
 
-          <section id="vix" className="scroll-mt-8 pb-16">
+          <Box component="section" id="vix" sx={{ scrollMarginTop: 32, pb: 8 }}>
             <SectionHeader num="05" title="VIX Dashboard" />
             <VixDashboard />
-          </section>
-        </div>
-      </main>
-    </div>
+          </Box>
+        </Box>
+      </Box>
+    </Box>
   );
 }

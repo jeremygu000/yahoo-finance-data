@@ -9,19 +9,40 @@ import {
   type UTCTimestamp,
   ColorType,
 } from "lightweight-charts";
+import Box from "@mui/material/Box";
+import Card from "@mui/material/Card";
+import CardContent from "@mui/material/CardContent";
+import Chip from "@mui/material/Chip";
+import ToggleButton from "@mui/material/ToggleButton";
+import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
+import Alert from "@mui/material/Alert";
+import CircularProgress from "@mui/material/CircularProgress";
 import { fetchCompare } from "@/lib/api";
 import type { CompareData } from "@/lib/types";
 import { TICKERS, TICKER_COLORS, type Ticker } from "@/lib/types";
+import { useThemeMode } from "./ThemeProvider";
 
 const DAYS_OPTIONS = [30, 90, 180, 365] as const;
 type Days = (typeof DAYS_OPTIONS)[number];
 
-const CHART_THEME = {
-  background: { type: ColorType.Solid, color: "#080d18" },
-  textColor: "#8892a4",
-  grid: { vertLines: { color: "#111827" }, horzLines: { color: "#111827" } },
-  crosshair: { vertLine: { color: "#334155" }, horzLine: { color: "#334155" } },
-};
+const CHART_THEMES = {
+  light: {
+    background: { type: ColorType.Solid, color: "#ffffff" },
+    textColor: "#627183",
+    grid: { vertLines: { color: "#f0f2f5" }, horzLines: { color: "#f0f2f5" } },
+    crosshair: { vertLine: { color: "#c5cdd8" }, horzLine: { color: "#c5cdd8" } },
+    borderColor: "#e5e9ef",
+    loadingBg: "rgba(255,255,255,0.8)",
+  },
+  dark: {
+    background: { type: ColorType.Solid, color: "#111827" },
+    textColor: "#8899aa",
+    grid: { vertLines: { color: "#1e2a3a" }, horzLines: { color: "#1e2a3a" } },
+    crosshair: { vertLine: { color: "#2d3748" }, horzLine: { color: "#2d3748" } },
+    borderColor: "#1e2a3a",
+    loadingBg: "rgba(17,24,39,0.8)",
+  },
+} as const;
 
 export default function PriceComparison() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -29,24 +50,26 @@ export default function PriceComparison() {
   const seriesMap = useRef<Map<string, ISeriesApi<"Line">>>(new Map());
 
   const [days, setDays] = useState<Days>(90);
-  const [selected, setSelected] = useState<Set<Ticker>>(
-    new Set(["QQQ", "XOM", "XLE"]),
-  );
+  const [selected, setSelected] = useState<Set<Ticker>>(new Set(["QQQ", "XOM", "XLE"]));
   const [data, setData] = useState<CompareData>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const { mode } = useThemeMode();
+
   useEffect(() => {
     if (!containerRef.current) return;
+
+    const theme = CHART_THEMES[mode];
 
     const chart = createChart(containerRef.current, {
       width: containerRef.current.clientWidth,
       height: 380,
-      layout: CHART_THEME,
-      grid: CHART_THEME.grid,
-      crosshair: CHART_THEME.crosshair,
-      rightPriceScale: { borderColor: "#1e293b" },
-      timeScale: { borderColor: "#1e293b", timeVisible: true },
+      layout: theme,
+      grid: theme.grid,
+      crosshair: theme.crosshair,
+      rightPriceScale: { borderColor: theme.borderColor },
+      timeScale: { borderColor: theme.borderColor, timeVisible: true },
     });
     chartRef.current = chart;
 
@@ -61,7 +84,19 @@ export default function PriceComparison() {
       ro.disconnect();
       chart.remove();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    const theme = CHART_THEMES[mode];
+    chartRef.current?.applyOptions({
+      layout: theme,
+      grid: theme.grid,
+      crosshair: theme.crosshair,
+      rightPriceScale: { borderColor: theme.borderColor },
+      timeScale: { borderColor: theme.borderColor },
+    });
+  }, [mode]);
 
   useEffect(() => {
     async function load() {
@@ -98,7 +133,7 @@ export default function PriceComparison() {
     }
 
     for (const [t, points] of Object.entries(data)) {
-      const color = TICKER_COLORS[t as Ticker] ?? "#ffffff";
+      const color = TICKER_COLORS[t as Ticker] ?? "#3b89ff";
       let series = seriesMap.current.get(t);
       if (!series) {
         series = chart.addSeries(LineSeries, { color, lineWidth: 2 });
@@ -128,71 +163,101 @@ export default function PriceComparison() {
   }
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="flex flex-wrap gap-2">
-          {TICKERS.map((t) => {
-            const active = selected.has(t);
-            const color = TICKER_COLORS[t];
-            return (
-              <button
-                key={t}
-                onClick={() => toggleTicker(t)}
-                className={`flex items-center gap-1.5 px-3 py-1 rounded text-xs font-mono transition-all border ${
-                  active
-                    ? "border-transparent"
-                    : "border-[var(--c-border)] text-[var(--c-muted)]"
-                }`}
-                style={
-                  active
-                    ? {
-                        backgroundColor: `${color}22`,
-                        color,
-                        borderColor: `${color}55`,
-                      }
-                    : {}
-                }
-              >
-                <span
-                  className="w-2 h-2 rounded-full inline-block"
-                  style={{ background: active ? color : "var(--c-border)" }}
+    <Card>
+      <CardContent sx={{ p: 3 }}>
+        <Box sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 2, mb: 3 }}>
+          <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
+            {TICKERS.map((t) => {
+              const active = selected.has(t);
+              const color = TICKER_COLORS[t];
+              return (
+                <Chip
+                  key={t}
+                  label={t}
+                  onClick={() => toggleTicker(t)}
+                  size="small"
+                  sx={{
+                    fontFamily: "var(--font-geist-mono)",
+                    fontWeight: 600,
+                    fontSize: "0.75rem",
+                    cursor: "pointer",
+                    bgcolor: active ? `${color}22` : "transparent",
+                    color: active ? color : "text.disabled",
+                    border: "1px solid",
+                    borderColor: active ? `${color}55` : "divider",
+                    "&:hover": {
+                      bgcolor: active ? `${color}33` : "action.hover",
+                    },
+                  }}
+                  icon={
+                    <Box
+                      component="span"
+                      sx={{
+                        width: 7,
+                        height: 7,
+                        borderRadius: "50%",
+                        bgcolor: active ? color : "divider",
+                        ml: "6px !important",
+                        mr: "-2px !important",
+                      }}
+                    />
+                  }
                 />
-                {t}
-              </button>
-            );
-          })}
-        </div>
-        <div className="ml-auto flex gap-1">
-          {DAYS_OPTIONS.map((d) => (
-            <button
-              key={d}
-              onClick={() => setDays(d)}
-              className={`px-2 py-1 text-xs font-mono rounded transition-colors ${
-                days === d
-                  ? "bg-[var(--c-accent)] text-[var(--c-bg)] font-semibold"
-                  : "text-[var(--c-muted)] hover:text-[var(--c-text)] hover:bg-[var(--c-surface-2)]"
-              }`}
+              );
+            })}
+          </Box>
+
+          <Box sx={{ ml: "auto" }}>
+            <ToggleButtonGroup
+              value={days}
+              exclusive
+              onChange={(_, v) => {
+                if (v !== null) setDays(v as Days);
+              }}
+              size="small"
             >
-              {d}d
-            </button>
-          ))}
-        </div>
-      </div>
+              {DAYS_OPTIONS.map((d) => (
+                <ToggleButton key={d} value={d}>
+                  {d}d
+                </ToggleButton>
+              ))}
+            </ToggleButtonGroup>
+          </Box>
+        </Box>
 
-      {error && (
-        <div className="text-[var(--c-red)] text-sm font-mono p-3 border border-[var(--c-red)]/30 rounded">
-          {error}
-        </div>
-      )}
-
-      <div className="relative rounded overflow-hidden border border-[var(--c-border)]">
-        {loading && (
-          <div className="absolute inset-0 flex items-center justify-center bg-[var(--c-bg)]/80 z-10">
-            <div className="loading-spinner" />
-          </div>
+        {error && (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            {error}
+          </Alert>
         )}
-        <div ref={containerRef} className="w-full" />
-      </div>
-    </div>
+
+        <Box
+          sx={{
+            position: "relative",
+            borderRadius: "8px",
+            overflow: "hidden",
+            border: "1px solid",
+            borderColor: "divider",
+          }}
+        >
+          {loading && (
+            <Box
+              sx={{
+                position: "absolute",
+                inset: 0,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                bgcolor: CHART_THEMES[mode].loadingBg,
+                zIndex: 10,
+              }}
+            >
+              <CircularProgress size={28} />
+            </Box>
+          )}
+          <div ref={containerRef} style={{ width: "100%" }} />
+        </Box>
+      </CardContent>
+    </Card>
   );
 }

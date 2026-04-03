@@ -1,11 +1,30 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Box from "@mui/material/Box";
+import Card from "@mui/material/Card";
+import CardContent from "@mui/material/CardContent";
+import Typography from "@mui/material/Typography";
+import Table from "@mui/material/Table";
+import TableBody from "@mui/material/TableBody";
+import TableCell from "@mui/material/TableCell";
+import TableContainer from "@mui/material/TableContainer";
+import TableHead from "@mui/material/TableHead";
+import TableRow from "@mui/material/TableRow";
+import TableSortLabel from "@mui/material/TableSortLabel";
+import TablePagination from "@mui/material/TablePagination";
+import Select from "@mui/material/Select";
+import MenuItem from "@mui/material/MenuItem";
+import FormControl from "@mui/material/FormControl";
+import InputLabel from "@mui/material/InputLabel";
+import Skeleton from "@mui/material/Skeleton";
+import Alert from "@mui/material/Alert";
 import { fetchOHLCV } from "@/lib/api";
 import type { OHLCVBar, SortColumn, SortDirection } from "@/lib/types";
 import { TICKERS } from "@/lib/types";
 
 const PAGE_SIZE = 50;
+const SKELETON_KEYS = Array.from({ length: 10 }, (_, i) => `skeleton-${String(i)}`);
 
 function formatNum(n: number, decimals = 2): string {
   return n.toLocaleString("en-US", {
@@ -56,7 +75,7 @@ export default function DataTable() {
     setPage(0);
   }
 
-  const sorted = [...allData].sort((a, b) => {
+  const sorted = allData.toSorted((a, b) => {
     let av: string | number, bv: string | number;
     if (sortCol === "date") {
       av = a.date;
@@ -70,7 +89,7 @@ export default function DataTable() {
     return 0;
   });
 
-  const totalPages = Math.ceil(sorted.length / PAGE_SIZE);
+  const totalRows = sorted.length;
   const pageData = sorted.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
   const cols: { key: SortColumn; label: string; align: "left" | "right" }[] = [
@@ -82,135 +101,122 @@ export default function DataTable() {
     { key: "volume", label: "Volume", align: "right" },
   ];
 
-  function SortIcon({ col }: { col: SortColumn }) {
-    if (col !== sortCol)
-      return <span className="text-[var(--c-border)]"> ⇅</span>;
-    return (
-      <span className="text-[var(--c-accent)]">
-        {sortDir === "asc" ? " ↑" : " ↓"}
-      </span>
-    );
-  }
-
   return (
-    <div className="space-y-3">
-      <div className="flex items-center gap-3">
-        <label className="text-xs text-[var(--c-muted)] uppercase tracking-wider">
-          Ticker
-        </label>
-        <select
-          value={ticker}
-          onChange={(e) => setTicker(e.target.value)}
-          className="select-field"
-        >
-          {TICKERS.map((t) => (
-            <option key={t} value={t}>
-              {t}
-            </option>
-          ))}
-        </select>
-        {!loading && (
-          <span className="text-xs text-[var(--c-muted)] font-mono ml-auto">
-            {sorted.length.toLocaleString()} rows
-          </span>
+    <Card>
+      <CardContent sx={{ p: 3 }}>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 2, mb: 3 }}>
+          <FormControl size="small" sx={{ minWidth: 100 }}>
+            <InputLabel>Ticker</InputLabel>
+            <Select value={ticker} label="Ticker" onChange={(e) => setTicker(e.target.value)}>
+              {TICKERS.map((t) => (
+                <MenuItem key={t} value={t}>
+                  {t}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          {!loading && (
+            <Typography
+              variant="caption"
+              sx={{ ml: "auto", color: "text.disabled", fontFamily: "var(--font-geist-mono)" }}
+            >
+              {totalRows.toLocaleString()} rows
+            </Typography>
+          )}
+        </Box>
+
+        {error && (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            {error}
+          </Alert>
         )}
-      </div>
 
-      {error && (
-        <div className="text-[var(--c-red)] text-sm font-mono p-3 border border-[var(--c-red)]/30 rounded">
-          {error}
-        </div>
-      )}
-
-      <div className="rounded border border-[var(--c-border)] overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs font-mono">
-            <thead>
-              <tr className="border-b border-[var(--c-border)] bg-[var(--c-surface-2)]">
+        <TableContainer sx={{ borderRadius: "8px", border: "1px solid", borderColor: "divider" }}>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
                 {cols.map((col) => (
-                  <th
-                    key={col.key}
-                    className={`px-4 py-2.5 font-semibold text-[var(--c-text-dim)] uppercase tracking-wider cursor-pointer hover:text-[var(--c-text)] select-none transition-colors ${
-                      col.align === "right" ? "text-right" : "text-left"
-                    }`}
-                    onClick={() => handleSort(col.key)}
-                  >
-                    {col.label}
-                    <SortIcon col={col.key} />
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {loading
-                ? Array.from({ length: 10 }).map((_, i) => (
-                    <tr
-                      key={i}
-                      className="border-b border-[var(--c-border)]/40"
+                  <TableCell key={col.key} align={col.align} sortDirection={sortCol === col.key ? sortDir : false}>
+                    <TableSortLabel
+                      active={sortCol === col.key}
+                      direction={sortCol === col.key ? sortDir : "asc"}
+                      onClick={() => handleSort(col.key)}
                     >
+                      {col.label}
+                    </TableSortLabel>
+                  </TableCell>
+                ))}
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {loading
+                ? SKELETON_KEYS.map((sk) => (
+                    <TableRow key={sk}>
                       {cols.map((col) => (
-                        <td key={col.key} className="px-4 py-2.5">
-                          <div className="h-3 rounded bg-[var(--c-surface-2)] animate-pulse w-full" />
-                        </td>
+                        <TableCell key={col.key}>
+                          <Skeleton variant="text" width="80%" />
+                        </TableCell>
                       ))}
-                    </tr>
+                    </TableRow>
                   ))
-                : pageData.map((row, i) => {
+                : pageData.map((row) => {
                     const isUp = row.close >= row.open;
                     return (
-                      <tr
-                        key={row.date + i}
-                        className="border-b border-[var(--c-border)]/40 hover:bg-[var(--c-surface-2)] transition-colors"
-                      >
-                        <td className="px-4 py-2 text-[var(--c-text-dim)]">
+                      <TableRow key={row.date} hover>
+                        <TableCell sx={{ fontFamily: "var(--font-geist-mono)", color: "text.secondary" }}>
                           {row.date}
-                        </td>
-                        <td className="px-4 py-2 text-right text-[var(--c-text)]">
+                        </TableCell>
+                        <TableCell align="right" sx={{ fontFamily: "var(--font-geist-mono)", color: "text.primary" }}>
                           {formatNum(row.open)}
-                        </td>
-                        <td className="px-4 py-2 text-right text-[var(--c-green)]">
+                        </TableCell>
+                        <TableCell align="right" sx={{ fontFamily: "var(--font-geist-mono)", color: "#36bb80" }}>
                           {formatNum(row.high)}
-                        </td>
-                        <td className="px-4 py-2 text-right text-[var(--c-red)]">
+                        </TableCell>
+                        <TableCell align="right" sx={{ fontFamily: "var(--font-geist-mono)", color: "#ff7134" }}>
                           {formatNum(row.low)}
-                        </td>
-                        <td
-                          className={`px-4 py-2 text-right font-semibold ${isUp ? "text-[var(--c-green)]" : "text-[var(--c-red)]"}`}
+                        </TableCell>
+                        <TableCell
+                          align="right"
+                          sx={{
+                            fontFamily: "var(--font-geist-mono)",
+                            fontWeight: 600,
+                            color: isUp ? "#36bb80" : "#ff7134",
+                          }}
                         >
                           {formatNum(row.close)}
-                        </td>
-                        <td className="px-4 py-2 text-right text-[var(--c-muted)]">
+                        </TableCell>
+                        <TableCell align="right" sx={{ fontFamily: "var(--font-geist-mono)", color: "text.disabled" }}>
                           {formatVolume(row.volume)}
-                        </td>
-                      </tr>
+                        </TableCell>
+                      </TableRow>
                     );
                   })}
-            </tbody>
-          </table>
-        </div>
-      </div>
+            </TableBody>
+          </Table>
+        </TableContainer>
 
-      {!loading && totalPages > 1 && (
-        <div className="flex items-center justify-between">
-          <button
-            onClick={() => setPage((p) => Math.max(0, p - 1))}
-            disabled={page === 0}
-            className="px-3 py-1.5 text-xs font-mono rounded border border-[var(--c-border)] text-[var(--c-muted)] hover:text-[var(--c-text)] hover:border-[var(--c-text-dim)] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-          >
-            ← Prev
-          </button>
-          <span className="text-xs font-mono text-[var(--c-muted)]">
-            Page {page + 1} / {totalPages}
-          </span>
-          <button
-            onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
-            disabled={page === totalPages - 1}
-            className="px-3 py-1.5 text-xs font-mono rounded border border-[var(--c-border)] text-[var(--c-muted)] hover:text-[var(--c-text)] hover:border-[var(--c-text-dim)] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-          >
-            Next →
-          </button>
-        </div>
-      )}
-    </div>
+        {!loading && totalRows > PAGE_SIZE && (
+          <TablePagination
+            component="div"
+            count={totalRows}
+            page={page}
+            onPageChange={(_, p) => setPage(p)}
+            rowsPerPage={PAGE_SIZE}
+            rowsPerPageOptions={[PAGE_SIZE]}
+            sx={{
+              borderTop: "1px solid",
+              borderColor: "divider",
+              mt: 0,
+              "& .MuiTablePagination-toolbar": { minHeight: 44 },
+              "& .MuiTablePagination-displayedRows": {
+                fontFamily: "var(--font-geist-mono)",
+                fontSize: "0.8rem",
+                color: "text.secondary",
+              },
+            }}
+          />
+        )}
+      </CardContent>
+    </Card>
   );
 }

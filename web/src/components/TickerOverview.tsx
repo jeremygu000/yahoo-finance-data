@@ -1,6 +1,18 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Box from "@mui/material/Box";
+import { useThemeMode } from "./ThemeProvider";
+import Card from "@mui/material/Card";
+import CardContent from "@mui/material/CardContent";
+import Typography from "@mui/material/Typography";
+import Chip from "@mui/material/Chip";
+import Grid from "@mui/material/Grid";
+import Skeleton from "@mui/material/Skeleton";
+import Alert from "@mui/material/Alert";
+import TrendingUpIcon from "@mui/icons-material/TrendingUp";
+import TrendingDownIcon from "@mui/icons-material/TrendingDown";
+import ShowChartIcon from "@mui/icons-material/ShowChart";
 import { fetchTickers, fetchLatest } from "@/lib/api";
 import type { TickerInfo, LatestQuote } from "@/lib/types";
 import { TICKERS } from "@/lib/types";
@@ -24,10 +36,13 @@ function formatVolume(n: number): string {
   return n.toString();
 }
 
+const ICON_COLORS = ["#3b89ff", "#ff7134", "#fdbc2a", "#36bb80", "#a855f7", "#ec4899"];
+
 export default function TickerOverview() {
   const [cards, setCards] = useState<TickerCard[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { mode } = useThemeMode();
 
   useEffect(() => {
     async function load() {
@@ -42,7 +57,7 @@ export default function TickerOverview() {
               change = latest.close - latest.open;
               changePct = ((latest.close - latest.open) / latest.open) * 100;
             }
-            return { ...info, latest, change, changePct };
+            return Object.assign({}, info, { latest, change, changePct });
           }),
         );
         setCards(enriched);
@@ -57,100 +72,212 @@ export default function TickerOverview() {
 
   if (loading) {
     return (
-      <div className="grid grid-cols-2 xl:grid-cols-3 gap-4">
+      <Grid container spacing={2}>
         {TICKERS.map((t) => (
-          <div key={t} className="card animate-pulse h-36" />
+          <Grid key={t} size={{ xs: 12, sm: 6, lg: 4 }}>
+            <Skeleton variant="rounded" height={160} sx={{ borderRadius: "12px" }} />
+          </Grid>
         ))}
-      </div>
+      </Grid>
     );
   }
 
   if (error) {
-    return (
-      <div className="text-[var(--c-red)] font-mono text-sm p-4 border border-[var(--c-red)]/30 rounded bg-[var(--c-red)]/5">
-        {error}
-      </div>
-    );
+    return <Alert severity="error">{error}</Alert>;
   }
 
   return (
-    <div className="grid grid-cols-2 xl:grid-cols-3 gap-4">
-      {cards.map((card) => {
+    <Grid container spacing={2}>
+      {cards.map((card, idx) => {
         const isUp = card.change !== null && card.change >= 0;
-        const changeColor =
-          card.change === null
-            ? "text-[var(--c-muted)]"
-            : isUp
-              ? "text-[var(--c-green)]"
-              : "text-[var(--c-red)]";
+        const iconColor = ICON_COLORS[idx % ICON_COLORS.length];
 
         return (
-          <div
-            key={card.ticker}
-            className="card group hover:border-[var(--c-accent)]/50 transition-colors"
-          >
-            <div className="flex items-start justify-between mb-3">
-              <div>
-                <span className="ticker-badge">{card.ticker}</span>
-              </div>
-              {card.change !== null && (
-                <div
-                  className={`text-xs font-mono font-semibold px-2 py-0.5 rounded ${isUp ? "bg-[var(--c-green)]/10 text-[var(--c-green)]" : "bg-[var(--c-red)]/10 text-[var(--c-red)]"}`}
+          <Grid key={card.ticker} size={{ xs: 12, sm: 6, lg: 4 }}>
+            <Card
+              sx={{
+                height: "100%",
+                transition: "box-shadow 0.2s",
+                "&:hover": {
+                  boxShadow: mode === "dark" ? "0 4px 16px rgba(59,137,255,0.25)" : "0 4px 16px rgba(59,137,255,0.12)",
+                },
+              }}
+            >
+              <CardContent sx={{ p: 2.5 }}>
+                <Box sx={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", mb: 2 }}>
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
+                    <Box
+                      sx={{
+                        width: 40,
+                        height: 40,
+                        borderRadius: "10px",
+                        bgcolor: `${iconColor}18`,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        flexShrink: 0,
+                      }}
+                    >
+                      <ShowChartIcon sx={{ color: iconColor, fontSize: "1.1rem" }} />
+                    </Box>
+                    <Typography
+                      sx={{
+                        fontFamily: "var(--font-geist-mono)",
+                        fontWeight: 700,
+                        fontSize: "0.875rem",
+                        letterSpacing: "0.06em",
+                        color: iconColor,
+                        textTransform: "uppercase",
+                      }}
+                    >
+                      {card.ticker}
+                    </Typography>
+                  </Box>
+
+                  {card.change !== null && (
+                    <Chip
+                      icon={
+                        isUp ? (
+                          <TrendingUpIcon sx={{ fontSize: "0.85rem !important" }} />
+                        ) : (
+                          <TrendingDownIcon sx={{ fontSize: "0.85rem !important" }} />
+                        )
+                      }
+                      label={`${isUp ? "+" : ""}${(card.changePct ?? 0).toFixed(2)}%`}
+                      size="small"
+                      sx={{
+                        fontFamily: "var(--font-geist-mono)",
+                        fontWeight: 700,
+                        fontSize: "0.7rem",
+                        bgcolor: isUp ? "rgba(54,187,128,0.1)" : "rgba(255,113,52,0.1)",
+                        color: isUp ? "#36bb80" : "#ff7134",
+                        "& .MuiChip-icon": {
+                          color: "inherit",
+                        },
+                      }}
+                    />
+                  )}
+                </Box>
+
+                <Box sx={{ mb: 2 }}>
+                  {card.latest ? (
+                    <Typography
+                      sx={{
+                        fontFamily: "var(--font-geist-mono)",
+                        fontWeight: 700,
+                        fontSize: "1.75rem",
+                        color: "text.primary",
+                        lineHeight: 1.1,
+                      }}
+                    >
+                      {formatPrice(card.latest.close)}
+                    </Typography>
+                  ) : (
+                    <Typography
+                      sx={{
+                        fontFamily: "var(--font-geist-mono)",
+                        fontSize: "1.25rem",
+                        color: "text.disabled",
+                      }}
+                    >
+                      —
+                    </Typography>
+                  )}
+                  {card.change !== null && (
+                    <Typography
+                      sx={{
+                        fontFamily: "var(--font-geist-mono)",
+                        fontSize: "0.8rem",
+                        color: isUp ? "#36bb80" : "#ff7134",
+                        mt: 0.25,
+                      }}
+                    >
+                      {card.change >= 0 ? "+" : ""}
+                      {formatPrice(card.change)}
+                    </Typography>
+                  )}
+                </Box>
+
+                <Box
+                  sx={{
+                    pt: 1.5,
+                    borderTop: "1px solid",
+                    borderColor: "divider",
+                    display: "grid",
+                    gridTemplateColumns: "1fr 1fr",
+                    gap: 0.75,
+                  }}
                 >
-                  {isUp ? "▲" : "▼"} {Math.abs(card.changePct ?? 0).toFixed(2)}%
-                </div>
-              )}
-            </div>
-
-            <div className="mb-3">
-              {card.latest ? (
-                <div className="text-2xl font-mono font-bold text-[var(--c-text)]">
-                  {formatPrice(card.latest.close)}
-                </div>
-              ) : (
-                <div className="text-lg font-mono text-[var(--c-muted)]">—</div>
-              )}
-              {card.change !== null && (
-                <div className={`text-sm font-mono ${changeColor}`}>
-                  {card.change >= 0 ? "+" : ""}
-                  {formatPrice(card.change)}
-                </div>
-              )}
-            </div>
-
-            <div className="border-t border-[var(--c-border)] pt-3 grid grid-cols-2 gap-x-4 gap-y-1">
-              <div className="text-[10px] text-[var(--c-muted)] uppercase tracking-wider">
-                Rows
-              </div>
-              <div className="text-[10px] text-[var(--c-muted)] uppercase tracking-wider">
-                Size
-              </div>
-              <div className="font-mono text-xs text-[var(--c-text-dim)]">
-                {card.rows.toLocaleString()}
-              </div>
-              <div className="font-mono text-xs text-[var(--c-text-dim)]">
-                {card.size_kb} KB
-              </div>
-              <div className="text-[10px] text-[var(--c-muted)] uppercase tracking-wider col-span-2 mt-1">
-                Range
-              </div>
-              <div className="font-mono text-xs text-[var(--c-text-dim)] col-span-2">
-                {card.first_date} → {card.last_date}
-              </div>
-              {card.latest && (
-                <>
-                  <div className="text-[10px] text-[var(--c-muted)] uppercase tracking-wider mt-1">
-                    Volume
-                  </div>
-                  <div className="font-mono text-xs text-[var(--c-text-dim)] mt-1">
-                    {formatVolume(card.latest.volume)}
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
+                  {[
+                    { label: "Rows", value: card.rows.toLocaleString() },
+                    { label: "Size", value: `${card.size_kb} KB` },
+                  ].map((stat) => (
+                    <Box key={stat.label}>
+                      <Typography
+                        variant="caption"
+                        sx={{
+                          color: "text.disabled",
+                          fontSize: "0.65rem",
+                          textTransform: "uppercase",
+                          letterSpacing: "0.06em",
+                          display: "block",
+                        }}
+                      >
+                        {stat.label}
+                      </Typography>
+                      <Typography
+                        sx={{ fontFamily: "var(--font-geist-mono)", fontSize: "0.75rem", color: "text.secondary" }}
+                      >
+                        {stat.value}
+                      </Typography>
+                    </Box>
+                  ))}
+                  <Box sx={{ gridColumn: "1 / -1" }}>
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        color: "text.disabled",
+                        fontSize: "0.65rem",
+                        textTransform: "uppercase",
+                        letterSpacing: "0.06em",
+                        display: "block",
+                      }}
+                    >
+                      Range
+                    </Typography>
+                    <Typography
+                      sx={{ fontFamily: "var(--font-geist-mono)", fontSize: "0.75rem", color: "text.secondary" }}
+                    >
+                      {card.first_date} → {card.last_date}
+                    </Typography>
+                  </Box>
+                  {card.latest && (
+                    <Box>
+                      <Typography
+                        variant="caption"
+                        sx={{
+                          color: "text.disabled",
+                          fontSize: "0.65rem",
+                          textTransform: "uppercase",
+                          letterSpacing: "0.06em",
+                          display: "block",
+                        }}
+                      >
+                        Volume
+                      </Typography>
+                      <Typography
+                        sx={{ fontFamily: "var(--font-geist-mono)", fontSize: "0.75rem", color: "text.secondary" }}
+                      >
+                        {formatVolume(card.latest.volume)}
+                      </Typography>
+                    </Box>
+                  )}
+                </Box>
+              </CardContent>
+            </Card>
+          </Grid>
         );
       })}
-    </div>
+    </Grid>
   );
 }
