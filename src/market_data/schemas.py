@@ -93,6 +93,9 @@ class AlertResponse(BaseModel):
     cooldown_seconds: int
     last_triggered: str | None
     created_at: str
+    channels: list[str]
+    telegram_chat_id: str
+    email: str
 
 
 class AlertCreateRequest(BaseModel):
@@ -100,6 +103,9 @@ class AlertCreateRequest(BaseModel):
     condition: AlertConditionEnum
     threshold: float
     cooldown_seconds: int = 300
+    channels: list[str] = []
+    telegram_chat_id: str = ""
+    email: str = ""
 
 
 class AlertListResponse(BaseModel):

@@ -167,6 +167,38 @@ export interface PortfolioSummaryResponse {
   holdings: PortfolioSummaryItem[];
 }
 
+// --- Alert Types ---
+
+export type AlertCondition = "above" | "below" | "percent_change_above" | "percent_change_below";
+
+export interface AlertResponse {
+  id: string;
+  ticker: string;
+  condition: string;
+  threshold: number;
+  enabled: boolean;
+  cooldown_seconds: number;
+  last_triggered: string | null;
+  created_at: string;
+  channels: string[];
+  telegram_chat_id: string;
+  email: string;
+}
+
+export interface AlertCreateRequest {
+  ticker: string;
+  condition: AlertCondition;
+  threshold: number;
+  cooldown_seconds?: number;
+  channels?: string[];
+  telegram_chat_id?: string;
+  email?: string;
+}
+
+export interface AlertListResponse {
+  alerts: AlertResponse[];
+}
+
 export const INDICATOR_COLORS: Record<string, string> = {
   SMA: "#3b89ff",
   EMA: "#ff6b35",

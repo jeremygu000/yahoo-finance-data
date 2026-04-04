@@ -24,6 +24,7 @@ from fastapi.routing import APIRouter
 from market_data import store, watchlist
 from market_data import alerts as alerts_mod
 from market_data import indicators as indicators_mod
+from market_data import notifications as notif_mod
 from market_data import portfolio as portfolio_mod
 from market_data.config import API_KEY, CORS_ORIGINS, DATA_DIR, DEFAULT_INTERVAL, VALID_INTERVALS, WS_POLL_INTERVAL
 from market_data.exceptions import (
@@ -263,6 +264,16 @@ async def _poll_prices() -> None:
                     for item in fired
                 ]
                 await _broadcast(WSMessage(type="alert_triggered", data=triggered_msgs))
+                dispatcher = notif_mod.get_dispatcher()
+                for item in fired:
+                    alert: alerts_mod.Alert = item["alert"]
+                    if alert.channels:
+                        subject, body = notif_mod.build_alert_message(item)
+                        recipient_map: dict[str, str] = {
+                            "telegram": alert.telegram_chat_id,
+                            "email": alert.email,
+                        }
+                        await dispatcher.dispatch(alert.channels, recipient_map, subject, body)
 
 
 @app.websocket("/ws/prices")
@@ -415,24 +426,26 @@ async def delete_from_watchlist(ticker: str) -> WatchlistResponse:
     return WatchlistResponse(tickers=wl.tickers)
 
 
+def _alert_to_response(a: alerts_mod.Alert) -> AlertResponse:
+    return AlertResponse(
+        id=a.id,
+        ticker=a.ticker,
+        condition=a.condition.value,
+        threshold=a.threshold,
+        enabled=a.enabled,
+        cooldown_seconds=a.cooldown_seconds,
+        last_triggered=a.last_triggered,
+        created_at=a.created_at,
+        channels=a.channels,
+        telegram_chat_id=a.telegram_chat_id,
+        email=a.email,
+    )
+
+
 @v1.get("/alerts", response_model=AlertListResponse)
 async def get_alerts(ticker: str | None = Query(default=None)) -> AlertListResponse:
     items = await asyncio.to_thread(alerts_mod.list_alerts, ticker)
-    return AlertListResponse(
-        alerts=[
-            AlertResponse(
-                id=a.id,
-                ticker=a.ticker,
-                condition=a.condition.value,
-                threshold=a.threshold,
-                enabled=a.enabled,
-                cooldown_seconds=a.cooldown_seconds,
-                last_triggered=a.last_triggered,
-                created_at=a.created_at,
-            )
-            for a in items
-        ]
-    )
+    return AlertListResponse(alerts=[_alert_to_response(a) for a in items])
 
 
 @v1.post("/alerts", response_model=AlertResponse)
@@ -442,38 +455,43 @@ async def create_alert(body: AlertCreateRequest) -> AlertResponse:
         condition=alerts_mod.AlertCondition(body.condition.value),
         threshold=body.threshold,
         cooldown_seconds=body.cooldown_seconds,
+        channels=body.channels,
+        telegram_chat_id=body.telegram_chat_id,
+        email=body.email,
     )
     await asyncio.to_thread(alerts_mod.add_alert, alert)
-    return AlertResponse(
-        id=alert.id,
-        ticker=alert.ticker,
-        condition=alert.condition.value,
-        threshold=alert.threshold,
-        enabled=alert.enabled,
-        cooldown_seconds=alert.cooldown_seconds,
-        last_triggered=alert.last_triggered,
-        created_at=alert.created_at,
-    )
+    return _alert_to_response(alert)
 
 
 @v1.delete("/alerts/{alert_id}", response_model=AlertListResponse)
 async def delete_alert(alert_id: str) -> AlertListResponse:
     store_after = await asyncio.to_thread(alerts_mod.remove_alert, alert_id)
-    return AlertListResponse(
-        alerts=[
-            AlertResponse(
-                id=a.id,
-                ticker=a.ticker,
-                condition=a.condition.value,
-                threshold=a.threshold,
-                enabled=a.enabled,
-                cooldown_seconds=a.cooldown_seconds,
-                last_triggered=a.last_triggered,
-                created_at=a.created_at,
-            )
-            for a in store_after.alerts
-        ]
-    )
+    return AlertListResponse(alerts=[_alert_to_response(a) for a in store_after.alerts])
+
+
+@v1.get("/alerts/channels")
+async def get_notification_channels() -> dict[str, list[str]]:
+    dispatcher = notif_mod.get_dispatcher()
+    return {"channels": dispatcher.available_channels}
+
+
+@v1.post("/alerts/test/{alert_id}")
+async def test_alert_notification(alert_id: str) -> dict[str, object]:
+    items = await asyncio.to_thread(alerts_mod.list_alerts)
+    alert = next((a for a in items if a.id == alert_id), None)
+    if alert is None:
+        return JSONResponse(status_code=404, content={"error": f"Alert {alert_id} not found"})  # type: ignore[return-value]
+    if not alert.channels:
+        return {"status": "skipped", "reason": "no channels configured"}
+    subject = f"[TEST] Alert: {alert.ticker} — {alert.condition.value} {alert.threshold}"
+    body = f"This is a test notification for your {alert.ticker} alert."
+    recipient_map: dict[str, str] = {
+        "telegram": alert.telegram_chat_id,
+        "email": alert.email,
+    }
+    dispatcher = notif_mod.get_dispatcher()
+    results = await dispatcher.dispatch(alert.channels, recipient_map, subject, body)
+    return {"status": "sent", "results": results}
 
 
 _INDICATOR_COLUMNS: dict[str, list[str]] = {
@@ -688,6 +706,8 @@ legacy.add_api_route("/watchlist/{ticker}", delete_from_watchlist, methods=["DEL
 legacy.add_api_route("/alerts", get_alerts, methods=["GET"])
 legacy.add_api_route("/alerts", create_alert, methods=["POST"])
 legacy.add_api_route("/alerts/{alert_id}", delete_alert, methods=["DELETE"])
+legacy.add_api_route("/alerts/channels", get_notification_channels, methods=["GET"])
+legacy.add_api_route("/alerts/test/{alert_id}", test_alert_notification, methods=["POST"])
 legacy.add_api_route("/indicators/{ticker}", get_indicators, methods=["GET"])
 legacy.add_api_route("/export/{ticker}", export_ohlcv, methods=["GET"])
 legacy.add_api_route("/portfolio", get_portfolio, methods=["GET"])

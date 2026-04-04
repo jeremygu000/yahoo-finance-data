@@ -13,6 +13,7 @@ import TimelineIcon from "@mui/icons-material/Timeline";
 import LightModeIcon from "@mui/icons-material/LightMode";
 import DarkModeIcon from "@mui/icons-material/DarkMode";
 import AccountBalanceWalletIcon from "@mui/icons-material/AccountBalanceWallet";
+import NotificationsIcon from "@mui/icons-material/Notifications";
 import SearchIcon from "@mui/icons-material/Search";
 
 import { searchTickers } from "@/lib/api";
@@ -34,6 +35,7 @@ const SECTIONS = [
   { id: "table", label: "Data Table", icon: TableChartIcon },
   { id: "vix", label: "VIX", icon: SpeedIcon },
   { id: "indicators", label: "Indicators", icon: TimelineIcon },
+  { id: "alerts", label: "Alerts", icon: NotificationsIcon },
 ];
 
 export default function CommandPalette() {

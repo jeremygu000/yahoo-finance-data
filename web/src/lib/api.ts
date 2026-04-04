@@ -10,6 +10,9 @@ import type {
   PortfolioAddRequest,
   PortfolioUpdateRequest,
   PortfolioSummaryResponse,
+  AlertResponse,
+  AlertCreateRequest,
+  AlertListResponse,
 } from "./types";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8100";
@@ -95,4 +98,36 @@ export async function deleteHolding(ticker: string): Promise<PortfolioResponse> 
 
 export async function fetchPortfolioSummary(): Promise<PortfolioSummaryResponse> {
   return fetcher<PortfolioSummaryResponse>("/api/v1/portfolio/summary");
+}
+
+export async function fetchAlerts(ticker?: string): Promise<AlertListResponse> {
+  const params = ticker ? `?ticker=${encodeURIComponent(ticker)}` : "";
+  return fetcher<AlertListResponse>(`/api/v1/alerts${params}`);
+}
+
+export async function createAlert(data: AlertCreateRequest): Promise<AlertResponse> {
+  const res = await fetch(`${BASE_URL}/api/v1/alerts`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error(`API error ${res.status}: POST /api/v1/alerts`);
+  return res.json() as Promise<AlertResponse>;
+}
+
+export async function deleteAlert(alertId: string): Promise<AlertListResponse> {
+  const res = await fetch(`${BASE_URL}/api/v1/alerts/${alertId}`, { method: "DELETE" });
+  if (!res.ok) throw new Error(`API error ${res.status}: DELETE /api/v1/alerts/${alertId}`);
+  return res.json() as Promise<AlertListResponse>;
+}
+
+export async function fetchAlertChannels(): Promise<string[]> {
+  const data = await fetcher<{ channels: string[] }>("/api/v1/alerts/channels");
+  return data.channels;
+}
+
+export async function testAlertNotification(alertId: string): Promise<{ status: string; results?: Record<string, boolean> }> {
+  const res = await fetch(`${BASE_URL}/api/v1/alerts/test/${alertId}`, { method: "POST" });
+  if (!res.ok) throw new Error(`API error ${res.status}: POST /api/v1/alerts/test/${alertId}`);
+  return res.json() as Promise<{ status: string; results?: Record<string, boolean> }>;
 }

@@ -10,6 +10,7 @@ import PriceComparison from "@/components/PriceComparison";
 import DataTable from "@/components/DataTable";
 import VixDashboard from "@/components/VixDashboard";
 import IndicatorChart from "@/components/IndicatorChart";
+import AlertManager from "@/components/AlertManager";
 
 function SectionHeader({ num, title }: { num: string; title: string }) {
   return (
@@ -75,9 +76,14 @@ export default function Home() {
             <VixDashboard />
           </Box>
 
-          <Box component="section" id="indicators" sx={{ scrollMarginTop: 32, pb: 8 }}>
+          <Box component="section" id="indicators" sx={{ scrollMarginTop: 32 }}>
             <SectionHeader num="06" title="Technical Indicators" />
             <IndicatorChart />
+          </Box>
+
+          <Box component="section" id="alerts" sx={{ scrollMarginTop: 32, pb: 8 }}>
+            <SectionHeader num="07" title="Price Alerts" />
+            <AlertManager />
           </Box>
         </Box>
       </Box>

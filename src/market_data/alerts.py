@@ -38,6 +38,9 @@ class Alert(BaseModel):
     last_triggered: str | None = None
     cooldown_seconds: int = 300
     created_at: str = ""
+    channels: list[str] = []
+    telegram_chat_id: str = ""
+    email: str = ""
 
     def model_post_init(self, __context: Any) -> None:
         if not self.id:

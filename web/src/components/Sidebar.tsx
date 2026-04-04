@@ -16,6 +16,7 @@ import CompareArrowsIcon from "@mui/icons-material/CompareArrows";
 import TableChartIcon from "@mui/icons-material/TableChart";
 import SpeedIcon from "@mui/icons-material/Speed";
 import TimelineIcon from "@mui/icons-material/Timeline";
+import NotificationsIcon from "@mui/icons-material/Notifications";
 import AccountBalanceWalletIcon from "@mui/icons-material/AccountBalanceWallet";
 import LightModeIcon from "@mui/icons-material/LightMode";
 import DarkModeIcon from "@mui/icons-material/DarkMode";
@@ -32,6 +33,7 @@ const NAV_ITEMS = [
   { id: "table", label: "Data Table", Icon: TableChartIcon },
   { id: "vix", label: "VIX", Icon: SpeedIcon },
   { id: "indicators", label: "Indicators", Icon: TimelineIcon },
+  { id: "alerts", label: "Alerts", Icon: NotificationsIcon },
 ] as const;
 
 type SectionId = (typeof NAV_ITEMS)[number]["id"];

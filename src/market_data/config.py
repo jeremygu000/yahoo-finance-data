@@ -67,3 +67,13 @@ CACHE_TTL_SECONDS = int(os.environ.get("MARKET_DATA_CACHE_TTL", "60"))
 CACHE_MAX_ENTRIES = int(os.environ.get("MARKET_DATA_CACHE_MAX_ENTRIES", "256"))
 
 API_KEY: str | None = os.environ.get("MARKET_DATA_API_KEY")
+
+# --- Notification channels ---
+TELEGRAM_BOT_TOKEN: str | None = os.environ.get("TELEGRAM_BOT_TOKEN")
+TELEGRAM_DEFAULT_CHAT_ID: str | None = os.environ.get("TELEGRAM_DEFAULT_CHAT_ID")
+
+SMTP_HOST: str = os.environ.get("SMTP_HOST", "smtp.gmail.com")
+SMTP_PORT: int = int(os.environ.get("SMTP_PORT", "587"))
+SMTP_USERNAME: str | None = os.environ.get("SMTP_USERNAME")
+SMTP_PASSWORD: str | None = os.environ.get("SMTP_PASSWORD")
+SMTP_FROM: str | None = os.environ.get("SMTP_FROM")
