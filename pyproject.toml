@@ -43,6 +43,9 @@ dev = [
     "pip-audit>=2.7",
 ]
 
+[tool.uv]
+override-dependencies = ["curl-cffi>=0.15.0"]
+
 [tool.black]
 line-length = 120
 target-version = ["py312"]
