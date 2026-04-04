@@ -2,7 +2,6 @@ import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import Divider from "@mui/material/Divider";
 import Chip from "@mui/material/Chip";
-import Sidebar from "@/components/Sidebar";
 import HeroBanner from "@/components/HeroBanner";
 import TickerOverview from "@/components/TickerOverview";
 import CandlestickChart from "@/components/CandlestickChart";
@@ -41,19 +40,10 @@ function SectionHeader({ num, title }: { num: string; title: string }) {
 
 export default function Home() {
   return (
-    <Box sx={{ display: "flex", minHeight: "100vh", bgcolor: "background.default" }}>
-      <Sidebar />
-      <Box
-        component="main"
-        sx={{
-          flex: 1,
-          overflowY: "auto",
-          height: "100vh",
-        }}
-      >
-        <HeroBanner />
+    <>
+      <HeroBanner />
 
-        <Box sx={{ maxWidth: 1100, mx: "auto", px: 4, py: 5, display: "flex", flexDirection: "column", gap: 6 }}>
+      <Box sx={{ maxWidth: 1100, mx: "auto", px: 4, py: 5, display: "flex", flexDirection: "column", gap: 6 }}>
           <Box component="section" id="overview" sx={{ scrollMarginTop: 32 }}>
             <SectionHeader num="01" title="Ticker Overview" />
             <TickerOverview />
@@ -104,7 +94,6 @@ export default function Home() {
             <AISummary />
           </Box>
         </Box>
-      </Box>
-    </Box>
+    </>
   );
 }
