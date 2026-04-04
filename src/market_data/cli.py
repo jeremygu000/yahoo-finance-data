@@ -144,7 +144,9 @@ def cmd_alerts(_args: argparse.Namespace) -> None:
     else:
         for a in items:
             status_str = "enabled" if a.enabled else "disabled"
-            print(f"[{a.id}] {a.ticker} {a.condition.value} {a.threshold} ({status_str}, cooldown={a.cooldown_seconds}s)")
+            print(
+                f"[{a.id}] {a.ticker} {a.condition.value} {a.threshold} ({status_str}, cooldown={a.cooldown_seconds}s)"
+            )
 
 
 def cmd_alert_add(args: argparse.Namespace) -> None:

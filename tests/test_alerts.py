@@ -98,85 +98,65 @@ class TestListByTicker:
 
 class TestEvaluateAlerts:
     def test_above_triggers(self) -> None:
-        store = AlertStore(
-            alerts=[Alert(ticker="AAPL", condition=AlertCondition.above, threshold=100.0)]
-        )
+        store = AlertStore(alerts=[Alert(ticker="AAPL", condition=AlertCondition.above, threshold=100.0)])
         price = make_price("AAPL", open=95.0, close=110.0)
         triggered = evaluate_alerts([price], store)
         assert len(triggered) == 1
         assert "above" in triggered[0]["message"]
 
     def test_above_no_trigger(self) -> None:
-        store = AlertStore(
-            alerts=[Alert(ticker="AAPL", condition=AlertCondition.above, threshold=200.0)]
-        )
+        store = AlertStore(alerts=[Alert(ticker="AAPL", condition=AlertCondition.above, threshold=200.0)])
         price = make_price("AAPL", open=95.0, close=110.0)
         triggered = evaluate_alerts([price], store)
         assert triggered == []
 
     def test_below_triggers(self) -> None:
-        store = AlertStore(
-            alerts=[Alert(ticker="AAPL", condition=AlertCondition.below, threshold=150.0)]
-        )
+        store = AlertStore(alerts=[Alert(ticker="AAPL", condition=AlertCondition.below, threshold=150.0)])
         price = make_price("AAPL", open=160.0, close=120.0)
         triggered = evaluate_alerts([price], store)
         assert len(triggered) == 1
         assert "below" in triggered[0]["message"]
 
     def test_below_no_trigger(self) -> None:
-        store = AlertStore(
-            alerts=[Alert(ticker="AAPL", condition=AlertCondition.below, threshold=50.0)]
-        )
+        store = AlertStore(alerts=[Alert(ticker="AAPL", condition=AlertCondition.below, threshold=50.0)])
         price = make_price("AAPL", open=95.0, close=110.0)
         triggered = evaluate_alerts([price], store)
         assert triggered == []
 
     def test_percent_change_above_triggers(self) -> None:
-        store = AlertStore(
-            alerts=[Alert(ticker="AAPL", condition=AlertCondition.percent_change_above, threshold=5.0)]
-        )
+        store = AlertStore(alerts=[Alert(ticker="AAPL", condition=AlertCondition.percent_change_above, threshold=5.0)])
         price = make_price("AAPL", open=100.0, close=110.0)
         triggered = evaluate_alerts([price], store)
         assert len(triggered) == 1
         assert "10.00%" in triggered[0]["message"]
 
     def test_percent_change_above_no_trigger(self) -> None:
-        store = AlertStore(
-            alerts=[Alert(ticker="AAPL", condition=AlertCondition.percent_change_above, threshold=15.0)]
-        )
+        store = AlertStore(alerts=[Alert(ticker="AAPL", condition=AlertCondition.percent_change_above, threshold=15.0)])
         price = make_price("AAPL", open=100.0, close=110.0)
         triggered = evaluate_alerts([price], store)
         assert triggered == []
 
     def test_percent_change_below_triggers(self) -> None:
-        store = AlertStore(
-            alerts=[Alert(ticker="AAPL", condition=AlertCondition.percent_change_below, threshold=5.0)]
-        )
+        store = AlertStore(alerts=[Alert(ticker="AAPL", condition=AlertCondition.percent_change_below, threshold=5.0)])
         price = make_price("AAPL", open=100.0, close=90.0)
         triggered = evaluate_alerts([price], store)
         assert len(triggered) == 1
         assert "-10.00%" in triggered[0]["message"]
 
     def test_percent_change_below_no_trigger(self) -> None:
-        store = AlertStore(
-            alerts=[Alert(ticker="AAPL", condition=AlertCondition.percent_change_below, threshold=15.0)]
-        )
+        store = AlertStore(alerts=[Alert(ticker="AAPL", condition=AlertCondition.percent_change_below, threshold=15.0)])
         price = make_price("AAPL", open=100.0, close=90.0)
         triggered = evaluate_alerts([price], store)
         assert triggered == []
 
     def test_disabled_alert_skipped(self) -> None:
-        store = AlertStore(
-            alerts=[Alert(ticker="AAPL", condition=AlertCondition.above, threshold=50.0, enabled=False)]
-        )
+        store = AlertStore(alerts=[Alert(ticker="AAPL", condition=AlertCondition.above, threshold=50.0, enabled=False)])
         price = make_price("AAPL", open=95.0, close=110.0)
         triggered = evaluate_alerts([price], store)
         assert triggered == []
 
     def test_no_price_for_ticker_skipped(self) -> None:
-        store = AlertStore(
-            alerts=[Alert(ticker="MSFT", condition=AlertCondition.above, threshold=50.0)]
-        )
+        store = AlertStore(alerts=[Alert(ticker="MSFT", condition=AlertCondition.above, threshold=50.0)])
         price = make_price("AAPL", open=95.0, close=110.0)
         triggered = evaluate_alerts([price], store)
         assert triggered == []
@@ -226,9 +206,7 @@ class TestEvaluateAlerts:
 
 class TestPersistence:
     def test_save_and_load(self) -> None:
-        store = AlertStore(
-            alerts=[Alert(ticker="AAPL", condition=AlertCondition.above, threshold=200.0)]
-        )
+        store = AlertStore(alerts=[Alert(ticker="AAPL", condition=AlertCondition.above, threshold=200.0)])
         save_alerts(store)
         loaded = load_alerts()
         assert len(loaded.alerts) == 1
@@ -238,9 +216,7 @@ class TestPersistence:
     def test_atomic_write(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         path = tmp_path / "sub" / "alerts.json"
         monkeypatch.setattr(alerts_mod, "ALERTS_PATH", path)
-        store = AlertStore(
-            alerts=[Alert(ticker="GOOG", condition=AlertCondition.below, threshold=100.0)]
-        )
+        store = AlertStore(alerts=[Alert(ticker="GOOG", condition=AlertCondition.below, threshold=100.0)])
         save_alerts(store)
         assert path.exists()
         data = json.loads(path.read_text())

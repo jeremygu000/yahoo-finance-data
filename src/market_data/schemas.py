@@ -113,3 +113,45 @@ class AlertTriggered(BaseModel):
     threshold: float
     current_price: float
     message: str
+
+
+class IndicatorPoint(BaseModel):
+    date: str
+    time: int
+    values: dict[str, float | None]
+
+
+class HoldingResponse(BaseModel):
+    ticker: str
+    shares: float
+    avg_cost: float
+    added_at: str
+
+
+class PortfolioResponse(BaseModel):
+    holdings: list[HoldingResponse]
+
+
+class PortfolioAddRequest(BaseModel):
+    ticker: str
+    shares: float
+    avg_cost: float
+
+
+class PortfolioUpdateRequest(BaseModel):
+    shares: float | None = None
+    avg_cost: float | None = None
+
+
+class PortfolioSummaryItem(BaseModel):
+    ticker: str
+    shares: float
+    avg_cost: float
+    current_price: float | None
+    market_value: float | None
+    total_gain: float | None
+    gain_pct: float | None
+
+
+class PortfolioSummaryResponse(BaseModel):
+    holdings: list[PortfolioSummaryItem]

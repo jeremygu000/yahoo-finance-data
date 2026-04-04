@@ -31,3 +31,5 @@ WS_POLL_INTERVAL = int(os.environ.get("MARKET_DATA_WS_POLL_INTERVAL", "30"))
 
 CACHE_TTL_SECONDS = int(os.environ.get("MARKET_DATA_CACHE_TTL", "60"))
 CACHE_MAX_ENTRIES = int(os.environ.get("MARKET_DATA_CACHE_MAX_ENTRIES", "256"))
+
+API_KEY: str | None = os.environ.get("MARKET_DATA_API_KEY")

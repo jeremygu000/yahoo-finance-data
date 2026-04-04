@@ -34,7 +34,17 @@ class JSONFormatter(logging.Formatter):
             log_entry["exception"] = self.formatException(record.exc_info)
 
         # Merge extra structured fields (set via logger.info("msg", extra={...}))
-        for key in ("request_id", "method", "path", "status_code", "latency_ms", "client_ip", "ticker", "provider", "error_type"):
+        for key in (
+            "request_id",
+            "method",
+            "path",
+            "status_code",
+            "latency_ms",
+            "client_ip",
+            "ticker",
+            "provider",
+            "error_type",
+        ):
             val = getattr(record, key, None)
             if val is not None:
                 log_entry[key] = val

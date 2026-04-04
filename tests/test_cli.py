@@ -26,7 +26,9 @@ def _make_ohlcv(rows: int = 5) -> pd.DataFrame:
 class TestBackfillBasic:
     @patch("market_data.cli.save")
     @patch("market_data.cli.fetch_batch")
-    def test_backfill_basic(self, mock_fetch: MagicMock, mock_save: MagicMock, capsys: pytest.CaptureFixture[str]) -> None:
+    def test_backfill_basic(
+        self, mock_fetch: MagicMock, mock_save: MagicMock, capsys: pytest.CaptureFixture[str]
+    ) -> None:
         df = _make_ohlcv(5)
         mock_fetch.return_value = {"AAPL": df}
         mock_save.return_value = 5

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import collections
+import io
 import logging
 import time
 import uuid
@@ -15,14 +16,16 @@ import pandas as pd
 from fastapi import FastAPI, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from starlette.responses import Response
+from starlette.responses import Response, StreamingResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from fastapi.routing import APIRouter
 
 from market_data import store, watchlist
 from market_data import alerts as alerts_mod
-from market_data.config import CORS_ORIGINS, DATA_DIR, DEFAULT_INTERVAL, VALID_INTERVALS, WS_POLL_INTERVAL
+from market_data import indicators as indicators_mod
+from market_data import portfolio as portfolio_mod
+from market_data.config import API_KEY, CORS_ORIGINS, DATA_DIR, DEFAULT_INTERVAL, VALID_INTERVALS, WS_POLL_INTERVAL
 from market_data.exceptions import (
     InvalidTickerError,
     MarketDataError,
@@ -36,8 +39,15 @@ from market_data.schemas import (
     ClosePoint,
     ErrorResponse,
     HealthResponse,
+    HoldingResponse,
+    IndicatorPoint,
     LatestQuote,
     OHLCVBar,
+    PortfolioAddRequest,
+    PortfolioResponse,
+    PortfolioSummaryItem,
+    PortfolioSummaryResponse,
+    PortfolioUpdateRequest,
     PriceUpdate,
     ReadyResponse,
     TickerStatus,
@@ -135,6 +145,19 @@ async def logging_and_error_middleware(request: Request, call_next: Any) -> Resp
             content={"error": "Rate limit exceeded"},
             headers={"Retry-After": str(RATE_LIMIT_WINDOW), "X-Request-ID": request_id},
         )
+
+    # Check API key auth if configured
+    if API_KEY is not None:
+        # Skip auth for these paths
+        skip_auth_paths = {"/health", "/ready", "/docs", "/openapi.json", "/ws/prices"}
+        if request.url.path not in skip_auth_paths:
+            provided_key = request.headers.get("X-API-Key")
+            if provided_key != API_KEY:
+                return JSONResponse(
+                    status_code=401,
+                    content={"error": "Invalid or missing API key"},
+                    headers={"X-Request-ID": request_id},
+                )
 
     try:
         response: Response = await call_next(request)
@@ -352,7 +375,8 @@ async def get_latest(ticker: str) -> dict[str, object] | None:
 
 
 @v1.get("/compare", response_model=dict[str, list[ClosePoint]])
-async def get_compare(    tickers: str = Query(description="Comma-separated tickers, e.g. QQQ,XOM,CRM"),
+async def get_compare(
+    tickers: str = Query(description="Comma-separated tickers, e.g. QQQ,XOM,CRM"),
     days: int = Query(default=90, ge=1, le=3650),
     interval: str = Query(default=DEFAULT_INTERVAL),
 ) -> dict[str, list[ClosePoint]]:
@@ -450,6 +474,187 @@ async def delete_alert(alert_id: str) -> AlertListResponse:
     )
 
 
+_INDICATOR_COLUMNS: dict[str, list[str]] = {
+    "sma": [],
+    "ema": [],
+    "rsi": [],
+    "macd": ["MACD", "Signal", "Histogram"],
+    "bollinger": ["BB_Upper", "BB_Middle", "BB_Lower"],
+}
+
+_VALID_INDICATORS = set(_INDICATOR_COLUMNS)
+
+
+def _indicator_records(result_df: pd.DataFrame) -> list[IndicatorPoint]:
+    if result_df.empty:
+        return []
+    ts_index = pd.DatetimeIndex(result_df.index)
+    dates = [d.isoformat() for d in ts_index.date]
+    unix_ts = (ts_index.astype("int64") // 10**9).tolist()
+    cols = result_df.columns.tolist()
+    rows: list[IndicatorPoint] = []
+    for i in range(len(result_df)):
+        raw_row = result_df.iloc[i]
+        values: dict[str, float | None] = {}
+        for c in cols:
+            v = raw_row[c]
+            values[c] = None if pd.isna(v) else float(v)
+        rows.append(IndicatorPoint(date=dates[i], time=unix_ts[i], values=values))
+    return rows
+
+
+@v1.get("/indicators/{ticker}", response_model=list[IndicatorPoint])
+async def get_indicators(
+    ticker: str,
+    indicator: str = Query(description="One of: sma, ema, rsi, macd, bollinger"),
+    period: int = Query(default=20, ge=1, le=500),
+    fast: int = Query(default=12, ge=1, le=500),
+    slow: int = Query(default=26, ge=1, le=500),
+    signal: int = Query(default=9, ge=1, le=500),
+    std_dev: float = Query(default=2.0, ge=0.1, le=10.0),
+    column: str = Query(default="Close"),
+    days: int = Query(default=365, ge=1, le=3650),
+    interval: str = Query(default=DEFAULT_INTERVAL),
+) -> list[IndicatorPoint]:
+    indicator = indicator.lower()
+    if indicator not in _VALID_INDICATORS:
+        return JSONResponse(  # type: ignore[return-value]
+            status_code=400,
+            content={"error": f"Invalid indicator {indicator!r}. Valid: {sorted(_VALID_INDICATORS)}"},
+        )
+    if interval not in VALID_INTERVALS:
+        return JSONResponse(  # type: ignore[return-value]
+            status_code=400,
+            content={"error": f"Invalid interval {interval!r}. Valid: {VALID_INTERVALS}"},
+        )
+    df = await asyncio.to_thread(store.load, ticker, days, DATA_DIR, interval)
+    if indicator == "sma":
+        result_df = await asyncio.to_thread(indicators_mod.sma, df, column, period)
+    elif indicator == "ema":
+        result_df = await asyncio.to_thread(indicators_mod.ema, df, column, period)
+    elif indicator == "rsi":
+        result_df = await asyncio.to_thread(indicators_mod.rsi, df, column, period)
+    elif indicator == "macd":
+        result_df = await asyncio.to_thread(indicators_mod.macd, df, column, fast, slow, signal)
+    else:
+        result_df = await asyncio.to_thread(indicators_mod.bollinger_bands, df, column, period, std_dev)
+    return _indicator_records(result_df)
+
+
+@v1.get("/portfolio", response_model=PortfolioResponse)
+async def get_portfolio() -> PortfolioResponse:
+    holdings = await asyncio.to_thread(portfolio_mod.list_holdings)
+    return PortfolioResponse(
+        holdings=[
+            HoldingResponse(ticker=h.ticker, shares=h.shares, avg_cost=h.avg_cost, added_at=h.added_at)
+            for h in holdings
+        ]
+    )
+
+
+@v1.post("/portfolio", response_model=PortfolioResponse)
+async def add_to_portfolio(body: PortfolioAddRequest) -> PortfolioResponse:
+    p = await asyncio.to_thread(portfolio_mod.add_holding, body.ticker, body.shares, body.avg_cost)
+    return PortfolioResponse(
+        holdings=[
+            HoldingResponse(ticker=h.ticker, shares=h.shares, avg_cost=h.avg_cost, added_at=h.added_at)
+            for h in p.holdings
+        ]
+    )
+
+
+@v1.put("/portfolio/{ticker}", response_model=PortfolioResponse)
+async def update_portfolio_holding(ticker: str, body: PortfolioUpdateRequest) -> PortfolioResponse:
+    p = await asyncio.to_thread(portfolio_mod.update_holding, ticker, body.shares, body.avg_cost)
+    if p is None:
+        return JSONResponse(status_code=404, content={"error": f"Holding {ticker.upper()} not found"})  # type: ignore[return-value]
+    return PortfolioResponse(
+        holdings=[
+            HoldingResponse(ticker=h.ticker, shares=h.shares, avg_cost=h.avg_cost, added_at=h.added_at)
+            for h in p.holdings
+        ]
+    )
+
+
+@v1.delete("/portfolio/{ticker}", response_model=PortfolioResponse)
+async def delete_from_portfolio(ticker: str) -> PortfolioResponse:
+    p = await asyncio.to_thread(portfolio_mod.remove_holding, ticker)
+    return PortfolioResponse(
+        holdings=[
+            HoldingResponse(ticker=h.ticker, shares=h.shares, avg_cost=h.avg_cost, added_at=h.added_at)
+            for h in p.holdings
+        ]
+    )
+
+
+@v1.get("/portfolio/summary", response_model=PortfolioSummaryResponse)
+async def get_portfolio_summary() -> PortfolioSummaryResponse:
+    from market_data.api import get_latest as _get_latest
+
+    holdings = await asyncio.to_thread(portfolio_mod.list_holdings)
+    items: list[PortfolioSummaryItem] = []
+    for h in holdings:
+        row = await asyncio.to_thread(_get_latest, h.ticker)
+        current_price: float | None = None
+        market_value: float | None = None
+        total_gain: float | None = None
+        gain_pct: float | None = None
+        if row is not None:
+            current_price = float(str(row["close"]))
+            market_value = round(current_price * h.shares, 4)
+            cost_basis = h.avg_cost * h.shares
+            total_gain = round(market_value - cost_basis, 4)
+            gain_pct = round((total_gain / cost_basis) * 100, 4) if cost_basis != 0 else None
+        items.append(
+            PortfolioSummaryItem(
+                ticker=h.ticker,
+                shares=h.shares,
+                avg_cost=h.avg_cost,
+                current_price=current_price,
+                market_value=market_value,
+                total_gain=total_gain,
+                gain_pct=gain_pct,
+            )
+        )
+    return PortfolioSummaryResponse(holdings=items)
+
+
+@v1.get("/export/{ticker}")
+async def export_ohlcv(
+    ticker: str,
+    format: str = Query(default="csv", description="Export format (csv only)"),
+    days: int = Query(default=365, ge=1, le=3650),
+    interval: str = Query(default=DEFAULT_INTERVAL),
+) -> StreamingResponse:
+    if format != "csv":
+        return JSONResponse(  # type: ignore[return-value]
+            status_code=400,
+            content={"error": f"Unsupported format {format!r}. Supported: csv"},
+        )
+    if interval not in VALID_INTERVALS:
+        return JSONResponse(  # type: ignore[return-value]
+            status_code=400,
+            content={"error": f"Invalid interval {interval!r}. Valid: {VALID_INTERVALS}"},
+        )
+    df = await asyncio.to_thread(store.load, ticker, days, DATA_DIR, interval)
+    if df.empty:
+        return JSONResponse(  # type: ignore[return-value]
+            status_code=404,
+            content={"error": f"No data found for ticker {ticker!r}"},
+        )
+
+    # Convert DataFrame to CSV
+    csv_buffer = io.StringIO()
+    df.to_csv(csv_buffer, index_label="Date")
+    csv_content = csv_buffer.getvalue()
+
+    return StreamingResponse(
+        iter([csv_content]),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{ticker.upper()}_ohlcv.csv"'},
+    )
+
+
 app.include_router(v1)
 # Backward-compatible aliases: /api/* -> same handlers as /api/v1/*
 legacy = APIRouter(prefix="/api", tags=["legacy"])
@@ -463,4 +668,11 @@ legacy.add_api_route("/watchlist/{ticker}", delete_from_watchlist, methods=["DEL
 legacy.add_api_route("/alerts", get_alerts, methods=["GET"])
 legacy.add_api_route("/alerts", create_alert, methods=["POST"])
 legacy.add_api_route("/alerts/{alert_id}", delete_alert, methods=["DELETE"])
+legacy.add_api_route("/indicators/{ticker}", get_indicators, methods=["GET"])
+legacy.add_api_route("/export/{ticker}", export_ohlcv, methods=["GET"])
+legacy.add_api_route("/portfolio", get_portfolio, methods=["GET"])
+legacy.add_api_route("/portfolio", add_to_portfolio, methods=["POST"])
+legacy.add_api_route("/portfolio/{ticker}", update_portfolio_holding, methods=["PUT"])
+legacy.add_api_route("/portfolio/{ticker}", delete_from_portfolio, methods=["DELETE"])
+legacy.add_api_route("/portfolio/summary", get_portfolio_summary, methods=["GET"])
 app.include_router(legacy)

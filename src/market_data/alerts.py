@@ -169,31 +169,23 @@ def evaluate_alerts(
         if alert.condition == AlertCondition.above:
             if price.close > alert.threshold:
                 fired = True
-                message = (
-                    f"{alert.ticker} close {price.close:.4f} crossed above threshold {alert.threshold}"
-                )
+                message = f"{alert.ticker} close {price.close:.4f} crossed above threshold {alert.threshold}"
         elif alert.condition == AlertCondition.below:
             if price.close < alert.threshold:
                 fired = True
-                message = (
-                    f"{alert.ticker} close {price.close:.4f} crossed below threshold {alert.threshold}"
-                )
+                message = f"{alert.ticker} close {price.close:.4f} crossed below threshold {alert.threshold}"
         elif alert.condition == AlertCondition.percent_change_above:
             if price.open != 0:
                 pct = (price.close - price.open) / price.open * 100
                 if pct > alert.threshold:
                     fired = True
-                    message = (
-                        f"{alert.ticker} daily change {pct:.2f}% exceeded +{alert.threshold}%"
-                    )
+                    message = f"{alert.ticker} daily change {pct:.2f}% exceeded +{alert.threshold}%"
         elif alert.condition == AlertCondition.percent_change_below:
             if price.open != 0:
                 pct = (price.close - price.open) / price.open * 100
                 if pct < -alert.threshold:
                     fired = True
-                    message = (
-                        f"{alert.ticker} daily change {pct:.2f}% fell below -{alert.threshold}%"
-                    )
+                    message = f"{alert.ticker} daily change {pct:.2f}% fell below -{alert.threshold}%"
 
         if fired:
             alert.last_triggered = now.isoformat()

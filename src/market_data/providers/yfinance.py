@@ -51,9 +51,7 @@ class YFinanceProvider(MarketDataProvider):
 
         return _normalize(raw)
 
-    def fetch_batch(
-        self, tickers: list[str], start: date, end: date, interval: str = "1d"
-    ) -> dict[str, pd.DataFrame]:
+    def fetch_batch(self, tickers: list[str], start: date, end: date, interval: str = "1d") -> dict[str, pd.DataFrame]:
         if not tickers:
             return {}
 
