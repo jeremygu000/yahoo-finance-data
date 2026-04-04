@@ -21,6 +21,7 @@ import AccountBalanceWalletIcon from "@mui/icons-material/AccountBalanceWallet";
 import LightModeIcon from "@mui/icons-material/LightMode";
 import DarkModeIcon from "@mui/icons-material/DarkMode";
 import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
+import AssessmentIcon from "@mui/icons-material/Assessment";
 import { useThemeMode } from "./ThemeProvider";
 import { useLivePrices } from "./PriceProvider";
 import TickerSearch from "./TickerSearch";
@@ -29,6 +30,7 @@ const DRAWER_WIDTH = 240;
 
 const NAV_ITEMS = [
   { id: "overview", label: "Overview", Icon: ShowChartIcon },
+  { id: "fundamentals", label: "Fundamentals", Icon: AssessmentIcon },
   { id: "candlestick", label: "Candlestick", Icon: CandlestickChartIcon },
   { id: "comparison", label: "Comparison", Icon: CompareArrowsIcon },
   { id: "table", label: "Data Table", Icon: TableChartIcon },

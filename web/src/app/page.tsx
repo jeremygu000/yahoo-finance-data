@@ -12,6 +12,7 @@ import VixDashboard from "@/components/VixDashboard";
 import IndicatorChart from "@/components/IndicatorChart";
 import AlertManager from "@/components/AlertManager";
 import AISummary from "@/components/AISummary";
+import FundamentalsCard from "@/components/FundamentalsCard";
 
 function SectionHeader({ num, title }: { num: string; title: string }) {
   return (
@@ -57,38 +58,43 @@ export default function Home() {
             <TickerOverview />
           </Box>
 
+          <Box component="section" id="fundamentals" sx={{ scrollMarginTop: 32 }}>
+            <SectionHeader num="02" title="Fundamentals" />
+            <FundamentalsCard />
+          </Box>
+
           <Box component="section" id="candlestick" sx={{ scrollMarginTop: 32 }}>
-            <SectionHeader num="02" title="Candlestick Chart" />
+            <SectionHeader num="03" title="Candlestick Chart" />
             <CandlestickChart />
           </Box>
 
           <Box component="section" id="comparison" sx={{ scrollMarginTop: 32 }}>
-            <SectionHeader num="03" title="Price Comparison" />
+            <SectionHeader num="04" title="Price Comparison" />
             <PriceComparison />
           </Box>
 
           <Box component="section" id="table" sx={{ scrollMarginTop: 32 }}>
-            <SectionHeader num="04" title="OHLCV Data Table" />
+            <SectionHeader num="05" title="OHLCV Data Table" />
             <DataTable />
           </Box>
 
           <Box component="section" id="vix" sx={{ scrollMarginTop: 32 }}>
-            <SectionHeader num="05" title="VIX Dashboard" />
+            <SectionHeader num="06" title="VIX Dashboard" />
             <VixDashboard />
           </Box>
 
           <Box component="section" id="indicators" sx={{ scrollMarginTop: 32 }}>
-            <SectionHeader num="06" title="Technical Indicators" />
+            <SectionHeader num="07" title="Technical Indicators" />
             <IndicatorChart />
           </Box>
 
           <Box component="section" id="alerts" sx={{ scrollMarginTop: 32 }}>
-            <SectionHeader num="07" title="Price Alerts" />
+            <SectionHeader num="08" title="Price Alerts" />
             <AlertManager />
           </Box>
 
           <Box component="section" id="ai-summary" sx={{ scrollMarginTop: 32, pb: 8 }}>
-            <SectionHeader num="08" title="AI Summary" />
+            <SectionHeader num="09" title="AI Summary" />
             <AISummary />
           </Box>
         </Box>

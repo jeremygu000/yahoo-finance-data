@@ -4,20 +4,18 @@ from __future__ import annotations
 
 import threading
 import time
-from typing import Protocol
-
-import pandas as pd
+from typing import Any, Protocol
 
 
 class CacheBackend(Protocol):
     """Cache protocol — implement get/set/delete/clear."""
 
-    def get(self, key: str) -> pd.DataFrame | None:
-        """Return cached DataFrame or None if miss/expired."""
+    def get(self, key: str) -> Any | None:
+        """Return cached value or None if miss/expired."""
         ...
 
-    def set(self, key: str, value: pd.DataFrame) -> None:
-        """Store a DataFrame in the cache."""
+    def set(self, key: str, value: Any) -> None:
+        """Store a value in the cache."""
         ...
 
     def delete(self, key: str) -> None:
@@ -34,27 +32,27 @@ class CacheBackend(Protocol):
 
 
 class InMemoryCache:
-    """Thread-safe in-memory DataFrame cache with TTL and max-size eviction."""
+    """Thread-safe in-memory cache with TTL and max-size eviction."""
 
     def __init__(self, ttl_seconds: int = 60, max_entries: int = 256) -> None:
         self._ttl = ttl_seconds
         self._max_entries = max_entries
-        self._store: dict[str, tuple[float, pd.DataFrame]] = {}
+        self._store: dict[str, tuple[float, Any]] = {}
         self._lock = threading.Lock()
 
-    def get(self, key: str) -> pd.DataFrame | None:
-        """Return cached DataFrame or None if miss/expired."""
+    def get(self, key: str) -> Any | None:
+        """Return cached value or None if miss/expired."""
         with self._lock:
             if key not in self._store:
                 return None
-            ts, df = self._store[key]
+            ts, value = self._store[key]
             if time.monotonic() - ts >= self._ttl:
                 del self._store[key]
                 return None
-            return df
+            return value
 
-    def set(self, key: str, value: pd.DataFrame) -> None:
-        """Store a DataFrame in the cache; evict oldest entry if max_entries exceeded."""
+    def set(self, key: str, value: Any) -> None:
+        """Store a value in the cache; evict oldest entry if max_entries exceeded."""
         with self._lock:
             self._store[key] = (time.monotonic(), value)
             if len(self._store) > self._max_entries:

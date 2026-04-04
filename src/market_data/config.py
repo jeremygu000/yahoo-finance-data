@@ -45,6 +45,12 @@ DEFAULT_TICKERS: list[str] = [
     # --- Healthcare ---
     "JNJ",
     "UNH",
+    # --- Crypto ---
+    "BTC-USD",
+    "ETH-USD",
+    # --- Forex ---
+    "EURUSD=X",
+    "GBPUSD=X",
 ]
 
 TICKER_LIST_FILE: str = os.environ.get("MARKET_DATA_TICKER_LIST_FILE", "")

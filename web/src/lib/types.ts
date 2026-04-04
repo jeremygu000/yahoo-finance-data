@@ -253,6 +253,30 @@ export interface ChatMessage {
   content: string;
 }
 
+// --- Fundamentals Types ---
+
+export interface FundamentalsResponse {
+  ticker: string;
+  short_name: string | null;
+  long_name: string | null;
+  sector: string | null;
+  industry: string | null;
+  market_cap: number | null;
+  trailing_pe: number | null;
+  forward_pe: number | null;
+  trailing_eps: number | null;
+  forward_eps: number | null;
+  dividend_yield: number | null;
+  total_revenue: number | null;
+  profit_margins: number | null;
+  fifty_two_week_high: number | null;
+  fifty_two_week_low: number | null;
+  average_volume: number | null;
+  beta: number | null;
+  currency: string | null;
+  quote_type: string | null;
+}
+
 export const INDICATOR_COLORS: Record<string, string> = {
   SMA: "#3b89ff",
   EMA: "#ff6b35",

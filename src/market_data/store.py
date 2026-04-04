@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 _cache = InMemoryCache(ttl_seconds=CACHE_TTL_SECONDS, max_entries=CACHE_MAX_ENTRIES)
 
-_TICKER_PATTERN = re.compile(r"^[\w\^./\\-]{1,20}$")
+_TICKER_PATTERN = re.compile(r"^[\w\^./\\=\-]{1,20}$")
 
 
 def validate_ticker(ticker: str) -> str:
@@ -26,13 +26,13 @@ def validate_ticker(ticker: str) -> str:
     ticker = ticker.strip()
 
     if not _TICKER_PATTERN.match(ticker):
-        raise InvalidTickerError(ticker, "Only alphanumeric, ^, -, ., / characters allowed (max 20 chars).")
+        raise InvalidTickerError(ticker, "Only alphanumeric, ^, -, ., /, = characters allowed (max 20 chars).")
 
     return _sanitize_ticker(ticker)
 
 
 def _sanitize_ticker(ticker: str) -> str:
-    return ticker.replace("^", "").replace("/", "_").replace("\\", "_").upper()
+    return ticker.replace("^", "").replace("/", "_").replace("\\", "_").replace("=", "_").upper()
 
 
 def _parquet_path(ticker: str, interval: str = "1d", data_dir: Path = DATA_DIR) -> Path:
@@ -99,7 +99,7 @@ def load(ticker: str, days: int | None = None, data_dir: Path = DATA_DIR, interv
     safe = validate_ticker(ticker)
     cache_key = f"{safe}:{interval}:{data_dir}"
 
-    cached = _cache.get(cache_key)
+    cached: pd.DataFrame | None = _cache.get(cache_key)
     if cached is not None:
         df = cached
     else:

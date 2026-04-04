@@ -25,6 +25,7 @@ from fastapi.routing import APIRouter
 from market_data import duckdb_reader, store, watchlist
 from market_data import alerts as alerts_mod
 from market_data import ai_summary as ai_mod
+from market_data import fundamentals as fundamentals_mod
 from market_data import indicators as indicators_mod
 from market_data import notifications as notif_mod
 from market_data import portfolio as portfolio_mod
@@ -50,6 +51,7 @@ from market_data.schemas import (
     ChatRequest,
     ClosePoint,
     ErrorResponse,
+    FundamentalsResponse,
     HealthResponse,
     HoldingResponse,
     IndicatorPoint,
@@ -749,6 +751,32 @@ async def search_tickers(
     return SearchResponse(results=results, query=q)
 
 
+@v1.get("/fundamentals/{ticker}", response_model=FundamentalsResponse)
+async def get_fundamentals(ticker: str) -> FundamentalsResponse:
+    raw = await asyncio.to_thread(fundamentals_mod.get_fundamentals, ticker)
+    return FundamentalsResponse(
+        ticker=raw["ticker"],
+        short_name=raw.get("shortName"),
+        long_name=raw.get("longName"),
+        sector=raw.get("sector"),
+        industry=raw.get("industry"),
+        market_cap=raw.get("marketCap"),
+        trailing_pe=raw.get("trailingPE"),
+        forward_pe=raw.get("forwardPE"),
+        trailing_eps=raw.get("trailingEps"),
+        forward_eps=raw.get("forwardEps"),
+        dividend_yield=raw.get("dividendYield"),
+        total_revenue=raw.get("totalRevenue"),
+        profit_margins=raw.get("profitMargins"),
+        fifty_two_week_high=raw.get("fiftyTwoWeekHigh"),
+        fifty_two_week_low=raw.get("fiftyTwoWeekLow"),
+        average_volume=raw.get("averageVolume"),
+        beta=raw.get("beta"),
+        currency=raw.get("currency"),
+        quote_type=raw.get("quoteType"),
+    )
+
+
 @v1.get("/ai/health")
 async def ai_health() -> dict[str, bool]:
     ok = await ai_mod.health_check()
@@ -831,6 +859,7 @@ legacy.add_api_route("/portfolio/{ticker}", update_portfolio_holding, methods=["
 legacy.add_api_route("/portfolio/{ticker}", delete_from_portfolio, methods=["DELETE"])
 legacy.add_api_route("/portfolio/summary", get_portfolio_summary, methods=["GET"])
 legacy.add_api_route("/search", search_tickers, methods=["GET"])
+legacy.add_api_route("/fundamentals/{ticker}", get_fundamentals, methods=["GET"])
 legacy.add_api_route("/ai/health", ai_health, methods=["GET"])
 legacy.add_api_route("/ai/summary", ai_summary, methods=["POST"])
 legacy.add_api_route("/ai/summary/stream", ai_summary_stream, methods=["POST"])

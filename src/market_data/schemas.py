@@ -212,3 +212,25 @@ class ChatRequest(BaseModel):
     session_id: str | None = None
     tickers: list[str] = []
     days: int = 30
+
+
+class FundamentalsResponse(BaseModel):
+    ticker: str
+    short_name: str | None = None
+    long_name: str | None = None
+    sector: str | None = None
+    industry: str | None = None
+    market_cap: float | None = None
+    trailing_pe: float | None = None
+    forward_pe: float | None = None
+    trailing_eps: float | None = None
+    forward_eps: float | None = None
+    dividend_yield: float | None = None
+    total_revenue: float | None = None
+    profit_margins: float | None = None
+    fifty_two_week_high: float | None = None
+    fifty_two_week_low: float | None = None
+    average_volume: float | None = None
+    beta: float | None = None
+    currency: str | None = None
+    quote_type: str | None = None

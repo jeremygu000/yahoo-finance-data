@@ -27,7 +27,7 @@ A detailed feature-by-feature comparison of yahoo-finance-data against similar h
 
 | Feature | yahoo-finance-data | OpenBB | OpenStock | QuantDinger | OpenAlice | yfinance | yahooquery | TV-Screener |
 |---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| **Data Source Count** | 1 (Yahoo) | 35+ | 1 (Finnhub) | 10+ | OpenBB | 1 (Yahoo) | 1 (Yahoo) | 1 (TV) |
+| **Data Source Count** | 3 (Yahoo+Tiingo+FMP) | 35+ | 1 (Finnhub) | 10+ | OpenBB | 1 (Yahoo) | 1 (Yahoo) | 1 (TV) |
 | **OHLCV** | ✅ | ✅ | ⚠️ Chart only | ✅ | ✅ | ✅ | ✅ | ✅ |
 | **Fundamentals** | ❌ | ✅ | ⚠️ Widget | ✅ | ✅ | ✅ | ✅ | ✅ |
 | **Options** | ❌ | ✅ | ❌ | ❌ | ❌ | ✅ | ✅ | ❌ |
@@ -62,7 +62,7 @@ A detailed feature-by-feature comparison of yahoo-finance-data against similar h
 | **UI Framework** | MUI | Custom | shadcn/ui | Ant Design | Custom | — | — | — |
 | **Portfolio Page** | ✅ | ✅ | ✅ Watchlist | ✅ | ✅ | — | — | — |
 | **Dark Mode** | ✅ | ✅ | ✅ Default | ✅ | ✅ | — | — | — |
-| **Cmd+K Search** | ❌ | ❌ | ✅ | ❌ | ❌ | — | — | — |
+| **Cmd+K Search** | ✅ | ❌ | ✅ | ❌ | ❌ | — | — | — |
 
 ### Operations & Deployment
 
@@ -71,13 +71,13 @@ A detailed feature-by-feature comparison of yahoo-finance-data against similar h
 | **Deployment** | Local (launchd) | Local/Docker/Cloud | Docker/Vercel | Docker Compose | Local (Node.js) | pip install | pip install | pip install |
 | **Multi-user** | ❌ | ✅ Enterprise | ✅ Better Auth | ✅ OAuth+RBAC | ❌ | — | — | — |
 | **Scheduled Tasks** | ✅ launchd | ❌ | ✅ Inngest | ✅ AI radar | ✅ Cron | — | — | — |
-| **Alerts** | ❌ | ❌ | ✅ Email | ✅ TG/Discord/Email | ✅ Telegram | — | — | — |
+| **Alerts** | ✅ TG/Email | ❌ | ✅ Email | ✅ TG/Discord/Email | ✅ Telegram | — | — | — |
 
 ### AI & Trading
 
 | Feature | yahoo-finance-data | OpenBB | OpenStock | QuantDinger | OpenAlice | yfinance | yahooquery | TV-Screener |
 |---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| **AI Features** | ❌ | ✅ Copilot+MCP | ✅ Gemini summaries | ✅ 7-Agent system | ✅ Cognitive brain | ❌ | ❌ | ❌ |
+| **AI Features** | ✅ LLM summaries | ✅ Copilot+MCP | ✅ Gemini summaries | ✅ 7-Agent system | ✅ Cognitive brain | ❌ | ❌ | ❌ |
 | **Live Trading** | ❌ | ❌ | ❌ | ✅ 10+ exchanges | ✅ CCXT/Alpaca/IBKR | ❌ | ❌ | ❌ |
 | **Paper Trading** | ❌ | ❌ | ❌ | ✅ Virtual positions | ✅ Mock Broker | ❌ | ❌ | ❌ |
 
@@ -104,18 +104,25 @@ A detailed feature-by-feature comparison of yahoo-finance-data against similar h
 |---|---|
 | **Parquet local storage** | No database setup; columnar format ideal for time-series; direct read by pandas/polars |
 | **Zero-dependency architecture** | No Docker, no Kubernetes, no Airflow — just `pip install` and go |
+| **Multi-provider fallback** | Yahoo + Tiingo + FMP with automatic failover chain |
 | **launchd scheduling** | Native macOS integration, no external scheduler needed |
 | **FastAPI + lightweight-charts** | Modern, performant stack without bloat |
+| **Cmd+K command palette** | Global fuzzy-search for tickers across the entire dashboard |
+| **AI market summaries** | LLM-powered analysis of OHLCV data with configurable provider |
+| **Price alerts** | Telegram + Email notifications with cooldown and per-ticker rules |
 | **Cross-project compatibility** | Parquet files consumed directly by algorithmic-trading project |
 
 ### Potential Growth Directions
 
 | Direction | Reference Project | Effort |
 |---|---|---|
-| Cmd+K global search | OpenStock | ⭐⭐ |
-| Price alerts + Telegram/Email notifications | QuantDinger | ⭐⭐⭐ |
-| Multi-data-source support (Polygon, Finnhub) | OpenBB's Provider architecture | ⭐⭐⭐⭐ |
-| AI market summaries | OpenStock (Gemini) / QuantDinger (7-Agent) | ⭐⭐⭐ |
+| Fundamentals data (P/E, EPS, market cap) | yfinance Ticker.info | ⭐⭐ |
+| Crypto / Forex asset types | yfinance (BTC-USD, EURUSD=X) | ⭐ |
+| Options chain data | yfinance option_chain API | ⭐⭐⭐ |
+| News feed integration | yfinance / Finnhub news API | ⭐⭐ |
+| More indicators (15-20 types) | TA-Lib / pandas-ta | ⭐⭐ |
+| Real-time streaming prices | yfinance WebSocket | ⭐⭐⭐ |
+| Docker deployment | Dockerfile + docker-compose | ⭐ |
 | Backtesting engine | QuantDinger | ⭐⭐⭐⭐ |
 | Multi-user authentication | OpenStock (Better Auth) | ⭐⭐⭐ |
 
