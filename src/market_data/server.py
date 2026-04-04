@@ -26,6 +26,7 @@ from market_data import duckdb_reader, store, watchlist
 from market_data import alerts as alerts_mod
 from market_data import ai_summary as ai_mod
 from market_data import fundamentals as fundamentals_mod
+from market_data import fundamentals_store as fund_store_mod
 from market_data import news as news_mod
 from market_data import indicators as indicators_mod
 from market_data import notifications as notif_mod
@@ -57,6 +58,8 @@ from market_data.schemas import (
     CleanResponse,
     ClosePoint,
     DeleteTickerResponse,
+    EarningsDateItem,
+    EarningsDatesResponse,
     ErrorResponse,
     FundamentalsResponse,
     HealthResponse,
@@ -74,6 +77,8 @@ from market_data.schemas import (
     PriceUpdate,
     QualityReportResponse,
     ReadyResponse,
+    RecommendationItem,
+    RecommendationsResponse,
     SearchResponse,
     SearchResult,
     StorageSummary,
@@ -82,6 +87,8 @@ from market_data.schemas import (
     TickerOverviewResponse,
     TickerQualityItem,
     TickerStatus,
+    UpgradeDowngradeItem,
+    UpgradesDowngradesResponse,
     WatchlistAddRequest,
     WatchlistResponse,
     WSMessage,
@@ -888,11 +895,11 @@ async def search_tickers(
     return SearchResponse(results=results, query=q)
 
 
-@v1.get("/fundamentals/{ticker}", response_model=FundamentalsResponse)
-async def get_fundamentals(ticker: str) -> FundamentalsResponse:
-    raw = await asyncio.to_thread(fundamentals_mod.get_fundamentals, ticker)
+def _raw_to_fundamentals_response(raw: dict[str, Any], source: str) -> FundamentalsResponse:
     return FundamentalsResponse(
-        ticker=raw["ticker"],
+        ticker=raw.get("ticker", ""),
+        fetched_at=raw.get("fetched_at"),
+        source=source,
         short_name=raw.get("shortName"),
         long_name=raw.get("longName"),
         sector=raw.get("sector"),
@@ -902,16 +909,120 @@ async def get_fundamentals(ticker: str) -> FundamentalsResponse:
         forward_pe=raw.get("forwardPE"),
         trailing_eps=raw.get("trailingEps"),
         forward_eps=raw.get("forwardEps"),
+        price_to_book=raw.get("priceToBook"),
+        price_to_sales_trailing_12_months=raw.get("priceToSalesTrailing12Months"),
+        peg_ratio=raw.get("pegRatio"),
+        enterprise_value=raw.get("enterpriseValue"),
+        enterprise_to_ebitda=raw.get("enterpriseToEbitda"),
         dividend_yield=raw.get("dividendYield"),
+        beta=raw.get("beta"),
+        regular_market_price=raw.get("regularMarketPrice"),
+        current_price=raw.get("currentPrice"),
+        currency=raw.get("currency"),
+        target_low_price=raw.get("targetLowPrice"),
+        target_high_price=raw.get("targetHighPrice"),
+        target_mean_price=raw.get("targetMeanPrice"),
+        target_median_price=raw.get("targetMedianPrice"),
+        number_of_analyst_opinions=raw.get("numberOfAnalystOpinions"),
+        recommendation_key=raw.get("recommendationKey"),
+        recommendation_mean=raw.get("recommendationMean"),
+        short_ratio=raw.get("shortRatio"),
+        short_percent_of_float=raw.get("shortPercentOfFloat"),
+        shares_short=raw.get("sharesShort"),
         total_revenue=raw.get("totalRevenue"),
+        revenue_growth=raw.get("revenueGrowth"),
+        gross_margins=raw.get("grossMargins"),
+        operating_margins=raw.get("operatingMargins"),
         profit_margins=raw.get("profitMargins"),
+        earnings_quarterly_growth=raw.get("earningsQuarterlyGrowth"),
+        earnings_growth=raw.get("earningsGrowth"),
+        return_on_equity=raw.get("returnOnEquity"),
+        debt_to_equity=raw.get("debtToEquity"),
         fifty_two_week_high=raw.get("fiftyTwoWeekHigh"),
         fifty_two_week_low=raw.get("fiftyTwoWeekLow"),
         average_volume=raw.get("averageVolume"),
-        beta=raw.get("beta"),
-        currency=raw.get("currency"),
         quote_type=raw.get("quoteType"),
     )
+
+
+@v1.get("/fundamentals/{ticker}", response_model=FundamentalsResponse)
+async def get_fundamentals(
+    ticker: str,
+    source: str = Query("auto", pattern="^(local|live|auto)$"),
+) -> FundamentalsResponse:
+    if source == "local":
+        local = await asyncio.to_thread(fund_store_mod.load_fundamentals, ticker)
+        if local is None:
+            return JSONResponse(status_code=404, content={"error": f"No local data for {ticker}"})  # type: ignore[return-value]
+        return _raw_to_fundamentals_response(local, source="local")
+
+    if source == "live":
+        raw = await asyncio.to_thread(fundamentals_mod.get_fundamentals, ticker)
+        return _raw_to_fundamentals_response(raw, source="live")
+
+    local = await asyncio.to_thread(fund_store_mod.load_fundamentals, ticker)
+    if local is not None:
+        return _raw_to_fundamentals_response(local, source="local")
+    raw = await asyncio.to_thread(fundamentals_mod.get_fundamentals, ticker)
+    return _raw_to_fundamentals_response(raw, source="live")
+
+
+@v1.get("/fundamentals/{ticker}/recommendations", response_model=RecommendationsResponse)
+async def get_recommendations(ticker: str) -> RecommendationsResponse:
+    df = await asyncio.to_thread(fund_store_mod.load_recommendations, ticker)
+    if df.empty:
+        return JSONResponse(status_code=404, content={"error": f"No recommendations data for {ticker}"})  # type: ignore[return-value]
+    items: list[RecommendationItem] = []
+    for idx, row in df.iterrows():
+        items.append(
+            RecommendationItem(
+                date=str(idx),
+                period=row.get("period"),
+                strong_buy=row.get("strongBuy"),
+                buy=row.get("buy"),
+                hold=row.get("hold"),
+                sell=row.get("sell"),
+                strong_sell=row.get("strongSell"),
+            )
+        )
+    return RecommendationsResponse(ticker=ticker.upper(), count=len(items), items=items)
+
+
+@v1.get("/fundamentals/{ticker}/earnings", response_model=EarningsDatesResponse)
+async def get_earnings_dates(ticker: str) -> EarningsDatesResponse:
+    df = await asyncio.to_thread(fund_store_mod.load_earnings_dates, ticker)
+    if df.empty:
+        return JSONResponse(status_code=404, content={"error": f"No earnings dates data for {ticker}"})  # type: ignore[return-value]
+    items: list[EarningsDateItem] = []
+    for idx, row in df.iterrows():
+        items.append(
+            EarningsDateItem(
+                date=str(idx),
+                eps_estimate=row.get("EPS Estimate"),
+                reported_eps=row.get("Reported EPS"),
+                surprise_pct=row.get("Surprise(%)"),
+            )
+        )
+    return EarningsDatesResponse(ticker=ticker.upper(), count=len(items), items=items)
+
+
+@v1.get("/fundamentals/{ticker}/upgrades", response_model=UpgradesDowngradesResponse)
+async def get_upgrades_downgrades(ticker: str) -> UpgradesDowngradesResponse:
+    df = await asyncio.to_thread(fund_store_mod.load_upgrades_downgrades, ticker)
+    if df.empty:
+        return JSONResponse(status_code=404, content={"error": f"No upgrades/downgrades data for {ticker}"})  # type: ignore[return-value]
+    items: list[UpgradeDowngradeItem] = []
+    for idx, row in df.iterrows():
+        items.append(
+            UpgradeDowngradeItem(
+                date=str(idx),
+                firm=row.get("Firm"),
+                to_grade=row.get("ToGrade"),
+                from_grade=row.get("FromGrade"),
+                action=row.get("Action"),
+            )
+        )
+    return UpgradesDowngradesResponse(ticker=ticker.upper(), count=len(items), items=items)
 
 
 @v1.get("/news/{ticker}", response_model=NewsResponse)
@@ -1076,6 +1187,9 @@ legacy.add_api_route("/portfolio/{ticker}", delete_from_portfolio, methods=["DEL
 legacy.add_api_route("/portfolio/summary", get_portfolio_summary, methods=["GET"])
 legacy.add_api_route("/search", search_tickers, methods=["GET"])
 legacy.add_api_route("/fundamentals/{ticker}", get_fundamentals, methods=["GET"])
+legacy.add_api_route("/fundamentals/{ticker}/recommendations", get_recommendations, methods=["GET"])
+legacy.add_api_route("/fundamentals/{ticker}/earnings", get_earnings_dates, methods=["GET"])
+legacy.add_api_route("/fundamentals/{ticker}/upgrades", get_upgrades_downgrades, methods=["GET"])
 legacy.add_api_route("/news/{ticker}", get_news, methods=["GET"])
 legacy.add_api_route("/ai/health", ai_health, methods=["GET"])
 legacy.add_api_route("/ai/summary", ai_summary, methods=["POST"])

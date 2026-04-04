@@ -15,23 +15,55 @@ _FUNDAMENTALS_TTL = max(CACHE_TTL_SECONDS, 300)
 _cache = InMemoryCache(ttl_seconds=_FUNDAMENTALS_TTL, max_entries=512)
 
 _INFO_KEYS: list[str] = [
-    "shortName",
-    "longName",
-    "sector",
-    "industry",
+    # Valuation
     "marketCap",
     "trailingPE",
     "forwardPE",
     "trailingEps",
     "forwardEps",
+    "priceToBook",
+    "priceToSalesTrailing12Months",
+    "pegRatio",
+    "enterpriseValue",
+    "enterpriseToEbitda",
     "dividendYield",
+    "beta",
+    # Price / Quote
+    "regularMarketPrice",
+    "currentPrice",
+    "currency",
+    # Price Targets
+    "targetLowPrice",
+    "targetHighPrice",
+    "targetMeanPrice",
+    "targetMedianPrice",
+    "numberOfAnalystOpinions",
+    # Analyst
+    "recommendationKey",
+    "recommendationMean",
+    # Short Interest
+    "shortRatio",
+    "shortPercentOfFloat",
+    "sharesShort",
+    # Income
     "totalRevenue",
+    "revenueGrowth",
+    "grossMargins",
+    "operatingMargins",
     "profitMargins",
+    "earningsQuarterlyGrowth",
+    "earningsGrowth",
+    # Quality factors
+    "returnOnEquity",
+    "debtToEquity",
+    # Identity & descriptive
+    "shortName",
+    "longName",
+    "sector",
+    "industry",
     "fiftyTwoWeekHigh",
     "fiftyTwoWeekLow",
     "averageVolume",
-    "beta",
-    "currency",
     "quoteType",
 ]
 

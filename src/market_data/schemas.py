@@ -226,6 +226,8 @@ class ChatRequest(BaseModel):
 
 class FundamentalsResponse(BaseModel):
     ticker: str
+    fetched_at: str | None = None
+    source: str | None = None
     short_name: str | None = None
     long_name: str | None = None
     sector: str | None = None
@@ -235,15 +237,82 @@ class FundamentalsResponse(BaseModel):
     forward_pe: float | None = None
     trailing_eps: float | None = None
     forward_eps: float | None = None
+    price_to_book: float | None = None
+    price_to_sales_trailing_12_months: float | None = None
+    peg_ratio: float | None = None
+    enterprise_value: float | None = None
+    enterprise_to_ebitda: float | None = None
     dividend_yield: float | None = None
+    beta: float | None = None
+    regular_market_price: float | None = None
+    current_price: float | None = None
+    currency: str | None = None
+    target_low_price: float | None = None
+    target_high_price: float | None = None
+    target_mean_price: float | None = None
+    target_median_price: float | None = None
+    number_of_analyst_opinions: float | None = None
+    recommendation_key: str | None = None
+    recommendation_mean: float | None = None
+    short_ratio: float | None = None
+    short_percent_of_float: float | None = None
+    shares_short: float | None = None
     total_revenue: float | None = None
+    revenue_growth: float | None = None
+    gross_margins: float | None = None
+    operating_margins: float | None = None
     profit_margins: float | None = None
+    earnings_quarterly_growth: float | None = None
+    earnings_growth: float | None = None
+    return_on_equity: float | None = None
+    debt_to_equity: float | None = None
     fifty_two_week_high: float | None = None
     fifty_two_week_low: float | None = None
     average_volume: float | None = None
-    beta: float | None = None
-    currency: str | None = None
     quote_type: str | None = None
+
+
+class RecommendationItem(BaseModel):
+    date: str
+    period: str | None = None
+    strong_buy: int | None = None
+    buy: int | None = None
+    hold: int | None = None
+    sell: int | None = None
+    strong_sell: int | None = None
+
+
+class RecommendationsResponse(BaseModel):
+    ticker: str
+    count: int
+    items: list[RecommendationItem]
+
+
+class EarningsDateItem(BaseModel):
+    date: str
+    eps_estimate: float | None = None
+    reported_eps: float | None = None
+    surprise_pct: float | None = None
+
+
+class EarningsDatesResponse(BaseModel):
+    ticker: str
+    count: int
+    items: list[EarningsDateItem]
+
+
+class UpgradeDowngradeItem(BaseModel):
+    date: str
+    firm: str | None = None
+    to_grade: str | None = None
+    from_grade: str | None = None
+    action: str | None = None
+
+
+class UpgradesDowngradesResponse(BaseModel):
+    ticker: str
+    count: int
+    items: list[UpgradeDowngradeItem]
 
 
 class NewsArticle(BaseModel):

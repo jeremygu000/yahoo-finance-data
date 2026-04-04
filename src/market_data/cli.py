@@ -7,6 +7,7 @@ from datetime import date, timedelta
 
 from market_data.config import LOOKBACK_DAYS, MIN_ROLLING_DAYS, VALID_INTERVALS, get_tickers
 from market_data.fetcher import fetch_batch
+from market_data.fundamentals_store import fetch_all_fundamental_data
 from market_data.logging_config import setup_logging
 from market_data.store import clean, last_date, save, status
 from market_data.watchlist import add_ticker, list_tickers, remove_ticker
@@ -29,6 +30,24 @@ def _filter_stale(tickers: list[str]) -> tuple[list[str], list[str]]:
     return stale, fresh
 
 
+def _fetch_fundamentals_for(tickers: list[str]) -> None:
+    print(f"\nFetching fundamentals for {len(tickers)} tickers...")
+    for i, ticker in enumerate(tickers, 1):
+        result = fetch_all_fundamental_data(ticker)
+        parts = []
+        if result.get("fundamentals"):
+            parts.append("info")
+        if result.get("recommendations"):
+            parts.append(f"recs={result['recommendations']}")
+        if result.get("earnings_dates"):
+            parts.append(f"earnings={result['earnings_dates']}")
+        if result.get("upgrades_downgrades"):
+            parts.append(f"upgrades={result['upgrades_downgrades']}")
+        summary = ", ".join(parts) if parts else "no data"
+        print(f"  [{i}/{len(tickers)}] {ticker}: {summary}")
+    print("Fundamentals fetch complete.")
+
+
 def cmd_fetch(args: argparse.Namespace) -> None:
     tickers = args.tickers.split(",") if args.tickers else get_tickers()
     tickers = [t.strip() for t in tickers]
@@ -43,6 +62,8 @@ def cmd_fetch(args: argparse.Namespace) -> None:
             print(f"Skipping {len(fresh)} up-to-date tickers")
         if not stale:
             print("All tickers are up-to-date. Nothing to fetch.")
+            if not args.skip_fundamentals:
+                _fetch_fundamentals_for(tickers)
             return
 
         tickers = stale
@@ -76,6 +97,11 @@ def cmd_fetch(args: argparse.Namespace) -> None:
 
     print(f"Done. {total_new} new rows added.")
 
+    if not args.skip_fundamentals:
+        all_tickers = args.tickers.split(",") if args.tickers else get_tickers()
+        all_tickers = [t.strip() for t in all_tickers]
+        _fetch_fundamentals_for(all_tickers)
+
 
 def cmd_status(_args: argparse.Namespace) -> None:
     entries = status()
@@ -105,6 +131,12 @@ def cmd_clean(args: argparse.Namespace) -> None:
     for ticker, count in removed.items():
         print(f"  {ticker}: removed {count} rows")
     print(f"Total: {sum(removed.values())} rows removed.")
+
+
+def cmd_fetch_fundamentals(args: argparse.Namespace) -> None:
+    tickers = args.tickers.split(",") if args.tickers else get_tickers()
+    tickers = [t.strip() for t in tickers]
+    _fetch_fundamentals_for(tickers)
 
 
 def cmd_backfill(args: argparse.Namespace) -> None:
@@ -260,6 +292,10 @@ def main() -> None:
     p_fetch = sub.add_parser("fetch", help="Fetch market data from Yahoo Finance")
     p_fetch.add_argument("--tickers", type=str, help="Comma-separated ticker list")
     p_fetch.add_argument("--full", action="store_true", help="Full historical fetch (ignore cache)")
+    p_fetch.add_argument("--skip-fundamentals", action="store_true", help="Skip fundamental data fetch")
+
+    p_fetch_fund = sub.add_parser("fetch-fundamentals", help="Fetch fundamental data for tickers")
+    p_fetch_fund.add_argument("--tickers", type=str, help="Comma-separated ticker list (default: watchlist)")
 
     sub.add_parser("status", help="Show cached data status")
 
@@ -327,6 +363,7 @@ def main() -> None:
 
     commands = {
         "fetch": cmd_fetch,
+        "fetch-fundamentals": cmd_fetch_fundamentals,
         "status": cmd_status,
         "clean": cmd_clean,
         "backfill": cmd_backfill,
