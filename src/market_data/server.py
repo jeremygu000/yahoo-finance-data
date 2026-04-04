@@ -16,10 +16,12 @@ from fastapi import FastAPI, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.responses import Response
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 from fastapi.routing import APIRouter
 
 from market_data import store, watchlist
+from market_data import alerts as alerts_mod
 from market_data.config import CORS_ORIGINS, DATA_DIR, DEFAULT_INTERVAL, VALID_INTERVALS, WS_POLL_INTERVAL
 from market_data.exceptions import (
     InvalidTickerError,
@@ -27,6 +29,10 @@ from market_data.exceptions import (
     TickerNotFoundError,
 )
 from market_data.schemas import (
+    AlertCreateRequest,
+    AlertListResponse,
+    AlertResponse,
+    AlertTriggered,
     ClosePoint,
     ErrorResponse,
     HealthResponse,
@@ -89,12 +95,32 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(title="Market Data API", version="0.1.0", lifespan=lifespan)
 v1 = APIRouter(prefix="/api/v1", tags=["v1"])
 
+
+class _WSCORSBypass:
+    """Let WebSocket connections bypass CORSMiddleware which rejects them with 403."""
+
+    def __init__(self, app: ASGIApp) -> None:
+        self._app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] == "websocket":
+            headers = dict(scope.get("headers", []))
+            origin = headers.get(b"origin", b"").decode()
+            if not origin or origin in CORS_ORIGINS:
+                await self._app(scope, receive, send)
+                return
+            await send({"type": "websocket.close", "code": 1008})
+            return
+        await self._app(scope, receive, send)
+
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,
-    allow_methods=["GET"],
+    allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
+app.add_middleware(_WSCORSBypass)
 
 
 @app.middleware("http")
@@ -197,6 +223,21 @@ async def _poll_prices() -> None:
                 updates.append(PriceUpdate.model_validate(row))
         if updates:
             await _broadcast(WSMessage(type="price_update", data=updates))
+            alert_store = await asyncio.to_thread(alerts_mod.load_alerts)
+            fired = await asyncio.to_thread(alerts_mod.evaluate_alerts, updates, alert_store)
+            if fired:
+                triggered_msgs = [
+                    AlertTriggered(
+                        alert_id=item["alert"].id,
+                        ticker=item["alert"].ticker,
+                        condition=item["alert"].condition.value,
+                        threshold=item["alert"].threshold,
+                        current_price=item["price"].close,
+                        message=item["message"],
+                    )
+                    for item in fired
+                ]
+                await _broadcast(WSMessage(type="alert_triggered", data=triggered_msgs))
 
 
 @app.websocket("/ws/prices")
@@ -348,6 +389,67 @@ async def delete_from_watchlist(ticker: str) -> WatchlistResponse:
     return WatchlistResponse(tickers=wl.tickers)
 
 
+@v1.get("/alerts", response_model=AlertListResponse)
+async def get_alerts(ticker: str | None = Query(default=None)) -> AlertListResponse:
+    items = await asyncio.to_thread(alerts_mod.list_alerts, ticker)
+    return AlertListResponse(
+        alerts=[
+            AlertResponse(
+                id=a.id,
+                ticker=a.ticker,
+                condition=a.condition.value,
+                threshold=a.threshold,
+                enabled=a.enabled,
+                cooldown_seconds=a.cooldown_seconds,
+                last_triggered=a.last_triggered,
+                created_at=a.created_at,
+            )
+            for a in items
+        ]
+    )
+
+
+@v1.post("/alerts", response_model=AlertResponse)
+async def create_alert(body: AlertCreateRequest) -> AlertResponse:
+    alert = alerts_mod.Alert(
+        ticker=body.ticker,
+        condition=alerts_mod.AlertCondition(body.condition.value),
+        threshold=body.threshold,
+        cooldown_seconds=body.cooldown_seconds,
+    )
+    await asyncio.to_thread(alerts_mod.add_alert, alert)
+    return AlertResponse(
+        id=alert.id,
+        ticker=alert.ticker,
+        condition=alert.condition.value,
+        threshold=alert.threshold,
+        enabled=alert.enabled,
+        cooldown_seconds=alert.cooldown_seconds,
+        last_triggered=alert.last_triggered,
+        created_at=alert.created_at,
+    )
+
+
+@v1.delete("/alerts/{alert_id}", response_model=AlertListResponse)
+async def delete_alert(alert_id: str) -> AlertListResponse:
+    store_after = await asyncio.to_thread(alerts_mod.remove_alert, alert_id)
+    return AlertListResponse(
+        alerts=[
+            AlertResponse(
+                id=a.id,
+                ticker=a.ticker,
+                condition=a.condition.value,
+                threshold=a.threshold,
+                enabled=a.enabled,
+                cooldown_seconds=a.cooldown_seconds,
+                last_triggered=a.last_triggered,
+                created_at=a.created_at,
+            )
+            for a in store_after.alerts
+        ]
+    )
+
+
 app.include_router(v1)
 # Backward-compatible aliases: /api/* -> same handlers as /api/v1/*
 legacy = APIRouter(prefix="/api", tags=["legacy"])
@@ -358,4 +460,7 @@ legacy.add_api_route("/compare", get_compare, methods=["GET"])
 legacy.add_api_route("/watchlist", get_watchlist, methods=["GET"])
 legacy.add_api_route("/watchlist", add_to_watchlist, methods=["POST"])
 legacy.add_api_route("/watchlist/{ticker}", delete_from_watchlist, methods=["DELETE"])
+legacy.add_api_route("/alerts", get_alerts, methods=["GET"])
+legacy.add_api_route("/alerts", create_alert, methods=["POST"])
+legacy.add_api_route("/alerts/{alert_id}", delete_alert, methods=["DELETE"])
 app.include_router(legacy)

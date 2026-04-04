@@ -139,10 +139,16 @@ export default function PriceComparison() {
         series = chart.addSeries(LineSeries, { color, lineWidth: 2 });
         seriesMap.current.set(t, series);
       }
-      const lineData = points.map((p) => ({
-        time: p.time as UTCTimestamp,
-        value: p.close,
-      }));
+      const seen = new Set<number>();
+      const lineData: { time: UTCTimestamp; value: number }[] = [];
+      for (const p of points) {
+        const t = p.time as UTCTimestamp;
+        if (!seen.has(t)) {
+          seen.add(t);
+          lineData.push({ time: t, value: p.close });
+        }
+      }
+      lineData.sort((a, b) => (a.time as number) - (b.time as number));
       series.setData(lineData);
     }
 

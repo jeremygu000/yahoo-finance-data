@@ -152,18 +152,23 @@ export default function CandlestickChart() {
         const bars = await fetchOHLCV(ticker, days);
         setData(bars);
         if (candleRef.current && volumeRef.current) {
-          const candles = bars.map((b) => ({
-            time: b.time as UTCTimestamp,
-            open: b.open,
-            high: b.high,
-            low: b.low,
-            close: b.close,
-          }));
-          const volumes = bars.map((b) => ({
-            time: b.time as UTCTimestamp,
-            value: b.volume,
-            color: b.close >= b.open ? "rgba(54,187,128,0.4)" : "rgba(255,113,52,0.4)",
-          }));
+          const seen = new Set<number>();
+          const candles: { time: UTCTimestamp; open: number; high: number; low: number; close: number }[] = [];
+          const volumes: { time: UTCTimestamp; value: number; color: string }[] = [];
+          for (const b of bars) {
+            const t = b.time as UTCTimestamp;
+            if (!seen.has(t)) {
+              seen.add(t);
+              candles.push({ time: t, open: b.open, high: b.high, low: b.low, close: b.close });
+              volumes.push({
+                time: t,
+                value: b.volume,
+                color: b.close >= b.open ? "rgba(54,187,128,0.4)" : "rgba(255,113,52,0.4)",
+              });
+            }
+          }
+          candles.sort((a, b) => (a.time as number) - (b.time as number));
+          volumes.sort((a, b) => (a.time as number) - (b.time as number));
           candleRef.current.setData(candles);
           volumeRef.current.setData(volumes);
           chartRef.current?.timeScale().fitContent();

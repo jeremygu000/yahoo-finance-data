@@ -18,6 +18,7 @@ import SpeedIcon from "@mui/icons-material/Speed";
 import LightModeIcon from "@mui/icons-material/LightMode";
 import DarkModeIcon from "@mui/icons-material/DarkMode";
 import { useThemeMode } from "./ThemeProvider";
+import { useLivePrices } from "./PriceProvider";
 
 const DRAWER_WIDTH = 240;
 
@@ -40,7 +41,19 @@ function scrollTo(id: SectionId) {
 
 export default function Sidebar() {
   const [active, setActive] = useState<SectionId>("overview");
+  const [mounted, setMounted] = useState(false);
   const { mode, toggleMode } = useThemeMode();
+  const { wsStatus } = useLivePrices();
+
+  const wsConfig = {
+    connected: { color: "#36bb80", label: "Live" },
+    connecting: { color: "#fdbc2a", label: "Connecting..." },
+    disconnected: { color: "#ff7134", label: "Offline" },
+  }[wsStatus];
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -238,6 +251,48 @@ export default function Sidebar() {
         >
           {process.env.NEXT_PUBLIC_API_URL ?? "localhost:8100"}
         </Typography>
+
+        {mounted && (
+          <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mt: 1.5 }}>
+            <Typography
+              sx={{
+                fontSize: "0.65rem",
+                color: "rgba(255,255,255,0.35)",
+                fontFamily: "var(--font-geist-mono)",
+                textTransform: "uppercase",
+              }}
+            >
+              WS
+            </Typography>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+              <Box
+                sx={{
+                  width: 6,
+                  height: 6,
+                  borderRadius: "50%",
+                  bgcolor: wsConfig.color,
+                  ...(wsStatus === "connected" && {
+                    "@keyframes wsPulse": {
+                      "0%, 100%": { opacity: 1, transform: "scale(1)" },
+                      "50%": { opacity: 0.5, transform: "scale(0.85)" },
+                    },
+                    animation: "wsPulse 2s ease-in-out infinite",
+                  }),
+                }}
+              />
+              <Typography
+                sx={{
+                  fontSize: "0.65rem",
+                  color: wsConfig.color,
+                  fontFamily: "var(--font-geist-mono)",
+                  transition: "color 0.3s ease",
+                }}
+              >
+                {wsConfig.label}
+              </Typography>
+            </Box>
+          </Box>
+        )}
       </Box>
     </Drawer>
   );

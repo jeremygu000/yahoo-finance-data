@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from enum import Enum
+
 from pydantic import BaseModel
 
 
@@ -64,7 +66,7 @@ class PriceUpdate(BaseModel):
 
 class WSMessage(BaseModel):
     type: str
-    data: list[PriceUpdate] | str
+    data: list[PriceUpdate] | list[AlertTriggered] | str
 
 
 class WatchlistResponse(BaseModel):
@@ -73,3 +75,41 @@ class WatchlistResponse(BaseModel):
 
 class WatchlistAddRequest(BaseModel):
     ticker: str
+
+
+class AlertConditionEnum(str, Enum):
+    above = "above"
+    below = "below"
+    percent_change_above = "percent_change_above"
+    percent_change_below = "percent_change_below"
+
+
+class AlertResponse(BaseModel):
+    id: str
+    ticker: str
+    condition: str
+    threshold: float
+    enabled: bool
+    cooldown_seconds: int
+    last_triggered: str | None
+    created_at: str
+
+
+class AlertCreateRequest(BaseModel):
+    ticker: str
+    condition: AlertConditionEnum
+    threshold: float
+    cooldown_seconds: int = 300
+
+
+class AlertListResponse(BaseModel):
+    alerts: list[AlertResponse]
+
+
+class AlertTriggered(BaseModel):
+    alert_id: str
+    ticker: str
+    condition: str
+    threshold: float
+    current_price: float
+    message: str

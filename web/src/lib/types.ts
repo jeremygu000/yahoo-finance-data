@@ -43,9 +43,18 @@ export interface PriceUpdate {
   volume: number;
 }
 
+export interface AlertTriggered {
+  alert_id: string;
+  ticker: string;
+  condition: string;
+  threshold: number;
+  current_price: number;
+  message: string;
+}
+
 export interface WSMessage {
-  type: "price_update" | "error";
-  data: PriceUpdate[] | string;
+  type: "price_update" | "alert_triggered" | "error";
+  data: PriceUpdate[] | AlertTriggered[] | string;
 }
 
 export type SortDirection = "asc" | "desc";

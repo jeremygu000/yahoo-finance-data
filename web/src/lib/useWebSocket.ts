@@ -1,16 +1,18 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import type { PriceUpdate, WSMessage } from "./types";
+import type { PriceUpdate, WSMessage, AlertTriggered } from "./types";
 
 const WS_URL = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8100").replace(/^http/, "ws") + "/ws/prices";
 const RECONNECT_DELAY_MS = 3000;
 const MAX_RECONNECT_ATTEMPTS = 10;
+const MAX_ALERTS = 10;
 
 export type WSStatus = "connecting" | "connected" | "disconnected";
 
 export function usePriceWebSocket() {
   const [prices, setPrices] = useState<Record<string, PriceUpdate>>({});
+  const [alerts, setAlerts] = useState<AlertTriggered[]>([]);
   const [status, setStatus] = useState<WSStatus>("disconnected");
   const wsRef = useRef<WebSocket | null>(null);
   const attemptsRef = useRef(0);
@@ -39,6 +41,12 @@ export function usePriceWebSocket() {
               next[update.ticker] = update;
             }
             return next;
+          });
+        } else if (msg.type === "alert_triggered" && Array.isArray(msg.data)) {
+          setAlerts((prev) => {
+            const newAlerts = msg.data as AlertTriggered[];
+            const combined = [...newAlerts, ...prev];
+            return combined.slice(0, MAX_ALERTS);
           });
         }
       } catch {
@@ -70,5 +78,5 @@ export function usePriceWebSocket() {
     };
   }, [connect]);
 
-  return { prices, status };
+  return { prices, alerts, status };
 }

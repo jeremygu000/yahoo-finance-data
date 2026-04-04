@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from market_data.exceptions import InvalidTickerError, TickerNotFoundError
 from market_data.server import app
 import market_data.watchlist as wl_mod
+import market_data.alerts as alerts_mod
 
 client = TestClient(app, raise_server_exceptions=False)
 
@@ -332,3 +333,67 @@ class TestWatchlist:
         client.post("/api/v1/watchlist", json={"ticker": "GOOG"})
         resp = client.get("/api/v1/watchlist")
         assert resp.json()["tickers"].count("GOOG") == 1
+
+
+class TestAlerts:
+    @pytest.fixture(autouse=True)
+    def isolated_alerts(self, tmp_path: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(alerts_mod, "ALERTS_PATH", tmp_path / "alerts.json")
+
+    def test_get_empty_alerts(self) -> None:
+        resp = client.get("/api/v1/alerts")
+        assert resp.status_code == 200
+        assert resp.json() == {"alerts": []}
+
+    def test_create_alert(self) -> None:
+        resp = client.post(
+            "/api/v1/alerts",
+            json={"ticker": "AAPL", "condition": "above", "threshold": 200.0},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["ticker"] == "AAPL"
+        assert body["condition"] == "above"
+        assert body["threshold"] == 200.0
+        assert "id" in body
+
+    def test_get_alerts_after_create(self) -> None:
+        client.post("/api/v1/alerts", json={"ticker": "AAPL", "condition": "above", "threshold": 200.0})
+        resp = client.get("/api/v1/alerts")
+        assert resp.status_code == 200
+        assert len(resp.json()["alerts"]) == 1
+
+    def test_get_alerts_with_ticker_filter(self) -> None:
+        client.post("/api/v1/alerts", json={"ticker": "AAPL", "condition": "above", "threshold": 200.0})
+        client.post("/api/v1/alerts", json={"ticker": "MSFT", "condition": "below", "threshold": 50.0})
+        resp = client.get("/api/v1/alerts", params={"ticker": "AAPL"})
+        assert resp.status_code == 200
+        alerts = resp.json()["alerts"]
+        assert len(alerts) == 1
+        assert alerts[0]["ticker"] == "AAPL"
+
+    def test_delete_alert(self) -> None:
+        create_resp = client.post(
+            "/api/v1/alerts",
+            json={"ticker": "AAPL", "condition": "above", "threshold": 200.0},
+        )
+        alert_id = create_resp.json()["id"]
+        resp = client.delete(f"/api/v1/alerts/{alert_id}")
+        assert resp.status_code == 200
+        assert resp.json() == {"alerts": []}
+
+    def test_create_alert_lowercase_ticker(self) -> None:
+        resp = client.post(
+            "/api/v1/alerts",
+            json={"ticker": "aapl", "condition": "above", "threshold": 200.0},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["ticker"] == "AAPL"
+
+    def test_create_alert_with_cooldown(self) -> None:
+        resp = client.post(
+            "/api/v1/alerts",
+            json={"ticker": "AAPL", "condition": "percent_change_above", "threshold": 5.0, "cooldown_seconds": 600},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["cooldown_seconds"] == 600

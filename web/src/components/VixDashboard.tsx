@@ -117,10 +117,16 @@ export default function VixDashboard() {
         setHistory(bars);
         setLatest(q);
         if (lineRef.current) {
-          const lineData = bars.map((b) => ({
-            time: b.time as UTCTimestamp,
-            value: b.close,
-          }));
+          const seen = new Set<number>();
+          const lineData: { time: UTCTimestamp; value: number }[] = [];
+          for (const b of bars) {
+            const t = b.time as UTCTimestamp;
+            if (!seen.has(t)) {
+              seen.add(t);
+              lineData.push({ time: t, value: b.close });
+            }
+          }
+          lineData.sort((a, b) => (a.time as number) - (b.time as number));
           lineRef.current.setData(lineData);
           chartRef.current?.timeScale().fitContent();
         }

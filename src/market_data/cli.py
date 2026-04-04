@@ -10,6 +10,7 @@ from market_data.fetcher import fetch_batch
 from market_data.logging_config import setup_logging
 from market_data.store import clean, last_date, save, status
 from market_data.watchlist import add_ticker, list_tickers, remove_ticker
+from market_data import alerts as alerts_mod
 
 logger = logging.getLogger(__name__)
 
@@ -136,6 +137,32 @@ def cmd_watchlist_remove(args: argparse.Namespace) -> None:
     print(f"Removed {args.ticker.upper()}. Watchlist: {wl.tickers}")
 
 
+def cmd_alerts(_args: argparse.Namespace) -> None:
+    items = alerts_mod.list_alerts()
+    if not items:
+        print("No alerts configured.")
+    else:
+        for a in items:
+            status_str = "enabled" if a.enabled else "disabled"
+            print(f"[{a.id}] {a.ticker} {a.condition.value} {a.threshold} ({status_str}, cooldown={a.cooldown_seconds}s)")
+
+
+def cmd_alert_add(args: argparse.Namespace) -> None:
+    alert = alerts_mod.Alert(
+        ticker=args.ticker,
+        condition=alerts_mod.AlertCondition(args.condition),
+        threshold=args.threshold,
+        cooldown_seconds=args.cooldown,
+    )
+    alerts_mod.add_alert(alert)
+    print(f"Alert added: [{alert.id}] {alert.ticker} {alert.condition.value} {alert.threshold}")
+
+
+def cmd_alert_remove(args: argparse.Namespace) -> None:
+    alerts_mod.remove_alert(args.id)
+    print(f"Alert {args.id} removed.")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         prog="market-data",
@@ -173,6 +200,23 @@ def main() -> None:
     p_wl_remove = sub.add_parser("watchlist-remove", help="Remove ticker from watchlist")
     p_wl_remove.add_argument("--ticker", type=str, required=True, help="Ticker to remove")
 
+    sub.add_parser("alerts", help="List all configured alerts")
+
+    p_alert_add = sub.add_parser("alert-add", help="Add a price alert")
+    p_alert_add.add_argument("--ticker", type=str, required=True, help="Ticker symbol")
+    p_alert_add.add_argument(
+        "--condition",
+        type=str,
+        required=True,
+        choices=[c.value for c in alerts_mod.AlertCondition],
+        help="Alert condition",
+    )
+    p_alert_add.add_argument("--threshold", type=float, required=True, help="Threshold value")
+    p_alert_add.add_argument("--cooldown", type=int, default=300, help="Cooldown in seconds (default 300)")
+
+    p_alert_remove = sub.add_parser("alert-remove", help="Remove an alert by ID")
+    p_alert_remove.add_argument("--id", type=str, required=True, help="Alert UUID to remove")
+
     args = parser.parse_args()
     setup_logging(json_format=False, level=logging.DEBUG if args.verbose else logging.INFO)
 
@@ -184,6 +228,9 @@ def main() -> None:
         "watchlist": cmd_watchlist,
         "watchlist-add": cmd_watchlist_add,
         "watchlist-remove": cmd_watchlist_remove,
+        "alerts": cmd_alerts,
+        "alert-add": cmd_alert_add,
+        "alert-remove": cmd_alert_remove,
     }
 
     handler = commands.get(args.command)
