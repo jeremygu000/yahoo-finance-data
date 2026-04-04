@@ -26,9 +26,7 @@ RUN pnpm build
 
 FROM node:22-slim AS runtime
 
-RUN corepack enable && \
-    groupadd --gid 1000 app && \
-    useradd --uid 1000 --gid app --create-home app
+RUN corepack enable
 
 WORKDIR /app
 
@@ -40,7 +38,7 @@ ENV NODE_ENV=production \
     HOSTNAME=0.0.0.0 \
     PORT=3000
 
-USER app
+USER node
 
 EXPOSE 3000
 
