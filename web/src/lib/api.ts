@@ -15,6 +15,7 @@ import type {
   AlertListResponse,
   SummaryRequest,
   SummaryResponse,
+  ChatRequest,
 } from "./types";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8100";
@@ -184,6 +185,64 @@ export async function streamAiSummary(
           return;
         }
         onToken(token);
+      }
+    }
+    if (!finished) {
+      return readNext();
+    }
+  }
+
+  return readNext();
+}
+
+export async function streamAiChat(
+  req: ChatRequest,
+  onSessionId: (sessionId: string) => void,
+  onToken: (token: string) => void,
+  onDone: () => void,
+): Promise<void> {
+  const res = await fetch(`${BASE_URL}/api/v1/ai/chat`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(req),
+  });
+  if (!res.ok) throw new Error(`API error ${res.status}: POST /api/v1/ai/chat`);
+  if (!res.body) throw new Error("No response body for streaming");
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let finished = false;
+  let firstDataReceived = false;
+
+  async function readNext(): Promise<void> {
+    const { done, value } = await reader.read();
+    if (done) {
+      onDone();
+      return;
+    }
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
+    for (const line of lines) {
+      if (line.startsWith("data: ")) {
+        const payload = line.slice(6);
+        if (payload === "[DONE]") {
+          finished = true;
+          onDone();
+          return;
+        }
+        if (!firstDataReceived) {
+          firstDataReceived = true;
+          try {
+            const parsed = JSON.parse(payload) as { session_id: string };
+            onSessionId(parsed.session_id);
+          } catch {
+            onToken(payload);
+          }
+        } else {
+          onToken(payload);
+        }
       }
     }
     if (!finished) {

@@ -213,6 +213,18 @@ export interface SummaryResponse {
   days: number;
 }
 
+export interface ChatRequest {
+  message: string;
+  session_id?: string;
+  tickers?: string[];
+  days?: number;
+}
+
+export interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
 export const INDICATOR_COLORS: Record<string, string> = {
   SMA: "#3b89ff",
   EMA: "#ff6b35",

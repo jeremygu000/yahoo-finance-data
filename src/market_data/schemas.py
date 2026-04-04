@@ -185,3 +185,10 @@ class SummaryResponse(BaseModel):
     eval_count: int
     tickers: list[str]
     days: int
+
+
+class ChatRequest(BaseModel):
+    message: str
+    session_id: str | None = None
+    tickers: list[str] = []
+    days: int = 30

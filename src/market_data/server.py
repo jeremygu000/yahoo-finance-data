@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import collections
 import io
+import json
 import logging
 import time
 import uuid
@@ -38,6 +39,7 @@ from market_data.schemas import (
     AlertListResponse,
     AlertResponse,
     AlertTriggered,
+    ChatRequest,
     ClosePoint,
     ErrorResponse,
     HealthResponse,
@@ -737,6 +739,24 @@ async def ai_summary_stream(req: SummaryRequest) -> StreamingResponse:
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
+@v1.post("/ai/chat")
+async def ai_chat(req: ChatRequest) -> StreamingResponse:
+    session_id, token_iter = await ai_mod.chat_stream_session(
+        session_id=req.session_id,
+        user_message=req.message,
+        tickers=req.tickers or None,
+        days=req.days,
+    )
+
+    async def event_stream() -> AsyncIterator[str]:
+        yield f"data: {json.dumps({'session_id': session_id})}\n\n"
+        async for token in token_iter:
+            yield f"data: {token}\n\n"
+        yield "data: [DONE]\n\n"
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
 app.include_router(v1)
 # Backward-compatible aliases: /api/* -> same handlers as /api/v1/*
 legacy = APIRouter(prefix="/api", tags=["legacy"])
@@ -763,4 +783,5 @@ legacy.add_api_route("/search", search_tickers, methods=["GET"])
 legacy.add_api_route("/ai/health", ai_health, methods=["GET"])
 legacy.add_api_route("/ai/summary", ai_summary, methods=["POST"])
 legacy.add_api_route("/ai/summary/stream", ai_summary_stream, methods=["POST"])
+legacy.add_api_route("/ai/chat", ai_chat, methods=["POST"])
 app.include_router(legacy)
