@@ -4,6 +4,7 @@ import "./globals.css";
 import ThemeProvider from "@/components/ThemeProvider";
 import PriceProvider from "@/components/PriceProvider";
 import AlertToast from "@/components/AlertToast";
+import CommandPalette from "@/components/CommandPalette";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -32,6 +33,7 @@ export default function RootLayout({
           <PriceProvider>
             {children}
             <AlertToast />
+            <CommandPalette />
           </PriceProvider>
         </ThemeProvider>
       </body>
