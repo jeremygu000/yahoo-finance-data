@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext } from "react";
+import { createContext, useContext, useMemo } from "react";
 import { usePriceWebSocket } from "@/lib/useWebSocket";
 import type { PriceUpdate, AlertTriggered } from "@/lib/types";
 import type { WSStatus } from "@/lib/useWebSocket";
@@ -23,6 +23,7 @@ export function useLivePrices(): PriceContextValue {
 
 export default function PriceProvider({ children }: { children: React.ReactNode }) {
   const { prices, alerts, status } = usePriceWebSocket();
+  const value = useMemo<PriceContextValue>(() => ({ prices, alerts, wsStatus: status }), [prices, alerts, status]);
 
-  return <PriceContext.Provider value={{ prices, alerts, wsStatus: status }}>{children}</PriceContext.Provider>;
+  return <PriceContext.Provider value={value}>{children}</PriceContext.Provider>;
 }

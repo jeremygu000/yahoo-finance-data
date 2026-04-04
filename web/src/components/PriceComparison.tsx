@@ -150,10 +150,10 @@ export default function PriceComparison() {
       const seen = new Set<number>();
       const lineData: { time: UTCTimestamp; value: number }[] = [];
       for (const p of points) {
-        const t = p.time as UTCTimestamp;
-        if (!seen.has(t)) {
-          seen.add(t);
-          lineData.push({ time: t, value: p.close });
+        const ts = p.time as UTCTimestamp;
+        if (!seen.has(ts)) {
+          seen.add(ts);
+          lineData.push({ time: ts, value: p.close });
         }
       }
       lineData.sort((a, b) => (a.time as number) - (b.time as number));

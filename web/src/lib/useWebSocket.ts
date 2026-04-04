@@ -26,14 +26,14 @@ export function usePriceWebSocket() {
     const ws = new WebSocket(WS_URL);
     wsRef.current = ws;
 
-    ws.onopen = () => {
+    ws.addEventListener("open", () => {
       setStatus("connected");
       attemptsRef.current = 0;
-    };
+    });
 
-    ws.onmessage = (event) => {
+    ws.addEventListener("message", (event) => {
       try {
-        const msg = JSON.parse(event.data) as WSMessage;
+        const msg = JSON.parse(event.data as string) as WSMessage;
         if (msg.type === "price_update" && Array.isArray(msg.data)) {
           setPrices((prev) => {
             const next = { ...prev };
@@ -52,20 +52,20 @@ export function usePriceWebSocket() {
       } catch {
         /* empty */
       }
-    };
+    });
 
-    ws.onclose = () => {
+    ws.addEventListener("close", () => {
       setStatus("disconnected");
       wsRef.current = null;
       if (!unmountedRef.current && attemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
         attemptsRef.current += 1;
         setTimeout(connect, RECONNECT_DELAY_MS);
       }
-    };
+    });
 
-    ws.onerror = () => {
+    ws.addEventListener("error", () => {
       ws.close();
-    };
+    });
   }, []);
 
   useEffect(() => {
