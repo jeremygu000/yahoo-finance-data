@@ -5,12 +5,46 @@ DATA_DIR = Path(os.environ.get("MARKET_DATA_DIR", str(Path.home() / ".market_dat
 LOG_DIR = Path(os.environ.get("MARKET_DATA_LOG_DIR", str(Path.home() / ".market_data" / "logs")))
 
 DEFAULT_TICKERS: list[str] = [
+    # --- Original ---
     "QQQ",
     "^VIX",
     "USO",
     "XOM",
     "XLE",
     "CRM",
+    # --- Broad market & factors ---
+    "SPY",
+    "IWM",
+    "MTUM",
+    # --- Sectors ---
+    "XLK",
+    "XLF",
+    "XLV",
+    "XLI",
+    "XLY",
+    # --- Fixed income & commodities ---
+    "TLT",
+    "IEF",
+    "GLD",
+    # --- Mega-cap tech ---
+    "AAPL",
+    "MSFT",
+    "GOOGL",
+    "AMZN",
+    "META",
+    "NVDA",
+    "TSLA",
+    # --- Consumer & financials ---
+    "WMT",
+    "HD",
+    "MCD",
+    "COST",
+    "JPM",
+    "V",
+    "MA",
+    # --- Healthcare ---
+    "JNJ",
+    "UNH",
 ]
 
 LOOKBACK_DAYS = int(os.environ.get("MARKET_DATA_LOOKBACK_DAYS", "365"))
