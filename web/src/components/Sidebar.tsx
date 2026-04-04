@@ -20,6 +20,7 @@ import NotificationsIcon from "@mui/icons-material/Notifications";
 import AccountBalanceWalletIcon from "@mui/icons-material/AccountBalanceWallet";
 import LightModeIcon from "@mui/icons-material/LightMode";
 import DarkModeIcon from "@mui/icons-material/DarkMode";
+import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
 import { useThemeMode } from "./ThemeProvider";
 import { useLivePrices } from "./PriceProvider";
 import TickerSearch from "./TickerSearch";
@@ -34,6 +35,7 @@ const NAV_ITEMS = [
   { id: "vix", label: "VIX", Icon: SpeedIcon },
   { id: "indicators", label: "Indicators", Icon: TimelineIcon },
   { id: "alerts", label: "Alerts", Icon: NotificationsIcon },
+  { id: "ai-summary", label: "AI Summary", Icon: AutoAwesomeIcon },
 ] as const;
 
 type SectionId = (typeof NAV_ITEMS)[number]["id"];

@@ -15,6 +15,7 @@ import DarkModeIcon from "@mui/icons-material/DarkMode";
 import AccountBalanceWalletIcon from "@mui/icons-material/AccountBalanceWallet";
 import NotificationsIcon from "@mui/icons-material/Notifications";
 import SearchIcon from "@mui/icons-material/Search";
+import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
 
 import { searchTickers } from "@/lib/api";
 import { useThemeMode } from "@/components/ThemeProvider";
@@ -36,6 +37,7 @@ const SECTIONS = [
   { id: "vix", label: "VIX", icon: SpeedIcon },
   { id: "indicators", label: "Indicators", icon: TimelineIcon },
   { id: "alerts", label: "Alerts", icon: NotificationsIcon },
+  { id: "ai-summary", label: "AI Summary", icon: AutoAwesomeIcon },
 ];
 
 export default function CommandPalette() {

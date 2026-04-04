@@ -23,6 +23,7 @@ from fastapi.routing import APIRouter
 
 from market_data import store, watchlist
 from market_data import alerts as alerts_mod
+from market_data import ai_summary as ai_mod
 from market_data import indicators as indicators_mod
 from market_data import notifications as notif_mod
 from market_data import portfolio as portfolio_mod
@@ -53,6 +54,8 @@ from market_data.schemas import (
     ReadyResponse,
     SearchResponse,
     SearchResult,
+    SummaryRequest,
+    SummaryResponse,
     TickerStatus,
     WatchlistAddRequest,
     WatchlistResponse,
@@ -693,6 +696,47 @@ async def search_tickers(
     return SearchResponse(results=results, query=q)
 
 
+@v1.get("/ai/health")
+async def ai_health() -> dict[str, bool]:
+    ok = await ai_mod.health_check()
+    return {"available": ok}
+
+
+@v1.post("/ai/summary", response_model=SummaryResponse)
+async def ai_summary(req: SummaryRequest) -> SummaryResponse:
+    tickers = req.tickers or await asyncio.to_thread(store.list_tickers)
+    if not tickers:
+        return SummaryResponse(
+            summary="No tickers available for analysis.",
+            model="",
+            total_duration_ms=0,
+            eval_count=0,
+            tickers=[],
+            days=req.days,
+        )
+    result = await ai_mod.generate_summary(tickers, days=req.days)
+    return SummaryResponse(
+        summary=result["response"],
+        model=result["model"],
+        total_duration_ms=result["total_duration_ms"],
+        eval_count=result["eval_count"],
+        tickers=tickers,
+        days=req.days,
+    )
+
+
+@v1.post("/ai/summary/stream")
+async def ai_summary_stream(req: SummaryRequest) -> StreamingResponse:
+    tickers = req.tickers or await asyncio.to_thread(store.list_tickers)
+
+    async def event_stream() -> AsyncIterator[str]:
+        async for token in ai_mod.generate_summary_stream(tickers, days=req.days):
+            yield f"data: {token}\n\n"
+        yield "data: [DONE]\n\n"
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
 app.include_router(v1)
 # Backward-compatible aliases: /api/* -> same handlers as /api/v1/*
 legacy = APIRouter(prefix="/api", tags=["legacy"])
@@ -716,4 +760,7 @@ legacy.add_api_route("/portfolio/{ticker}", update_portfolio_holding, methods=["
 legacy.add_api_route("/portfolio/{ticker}", delete_from_portfolio, methods=["DELETE"])
 legacy.add_api_route("/portfolio/summary", get_portfolio_summary, methods=["GET"])
 legacy.add_api_route("/search", search_tickers, methods=["GET"])
+legacy.add_api_route("/ai/health", ai_health, methods=["GET"])
+legacy.add_api_route("/ai/summary", ai_summary, methods=["POST"])
+legacy.add_api_route("/ai/summary/stream", ai_summary_stream, methods=["POST"])
 app.include_router(legacy)

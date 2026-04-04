@@ -77,3 +77,8 @@ SMTP_PORT: int = int(os.environ.get("SMTP_PORT", "587"))
 SMTP_USERNAME: str | None = os.environ.get("SMTP_USERNAME")
 SMTP_PASSWORD: str | None = os.environ.get("SMTP_PASSWORD")
 SMTP_FROM: str | None = os.environ.get("SMTP_FROM")
+
+# --- AI / Ollama ---
+OLLAMA_HOST: str = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
+OLLAMA_MODEL: str = os.environ.get("OLLAMA_MODEL", "qwen3:32b")
+OLLAMA_TIMEOUT: int = int(os.environ.get("OLLAMA_TIMEOUT", "180"))

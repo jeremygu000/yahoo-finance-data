@@ -199,6 +199,20 @@ export interface AlertListResponse {
   alerts: AlertResponse[];
 }
 
+export interface SummaryRequest {
+  tickers?: string[];
+  days?: number;
+}
+
+export interface SummaryResponse {
+  summary: string;
+  model: string;
+  total_duration_ms: number;
+  eval_count: number;
+  tickers: string[];
+  days: number;
+}
+
 export const INDICATOR_COLORS: Record<string, string> = {
   SMA: "#3b89ff",
   EMA: "#ff6b35",

@@ -13,6 +13,8 @@ import type {
   AlertResponse,
   AlertCreateRequest,
   AlertListResponse,
+  SummaryRequest,
+  SummaryResponse,
 } from "./types";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8100";
@@ -130,4 +132,64 @@ export async function testAlertNotification(alertId: string): Promise<{ status: 
   const res = await fetch(`${BASE_URL}/api/v1/alerts/test/${alertId}`, { method: "POST" });
   if (!res.ok) throw new Error(`API error ${res.status}: POST /api/v1/alerts/test/${alertId}`);
   return res.json() as Promise<{ status: string; results?: Record<string, boolean> }>;
+}
+
+export async function fetchAiHealth(): Promise<{ available: boolean }> {
+  return fetcher<{ available: boolean }>("/api/v1/ai/health");
+}
+
+export async function fetchAiSummary(req: SummaryRequest): Promise<SummaryResponse> {
+  const res = await fetch(`${BASE_URL}/api/v1/ai/summary`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(req),
+  });
+  if (!res.ok) throw new Error(`API error ${res.status}: POST /api/v1/ai/summary`);
+  return res.json() as Promise<SummaryResponse>;
+}
+
+export async function streamAiSummary(
+  req: SummaryRequest,
+  onToken: (token: string) => void,
+  onDone: () => void,
+): Promise<void> {
+  const res = await fetch(`${BASE_URL}/api/v1/ai/summary/stream`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(req),
+  });
+  if (!res.ok) throw new Error(`API error ${res.status}: POST /api/v1/ai/summary/stream`);
+  if (!res.body) throw new Error("No response body for streaming");
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let finished = false;
+
+  async function readNext(): Promise<void> {
+    const { done, value } = await reader.read();
+    if (done) {
+      onDone();
+      return;
+    }
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
+    for (const line of lines) {
+      if (line.startsWith("data: ")) {
+        const token = line.slice(6);
+        if (token === "[DONE]") {
+          finished = true;
+          onDone();
+          return;
+        }
+        onToken(token);
+      }
+    }
+    if (!finished) {
+      return readNext();
+    }
+  }
+
+  return readNext();
 }

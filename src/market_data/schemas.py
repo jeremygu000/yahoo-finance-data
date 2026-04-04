@@ -171,3 +171,17 @@ class SearchResult(BaseModel):
 class SearchResponse(BaseModel):
     results: list[SearchResult]
     query: str
+
+
+class SummaryRequest(BaseModel):
+    tickers: list[str] = []
+    days: int = 30
+
+
+class SummaryResponse(BaseModel):
+    summary: str
+    model: str
+    total_duration_ms: int
+    eval_count: int
+    tickers: list[str]
+    days: int

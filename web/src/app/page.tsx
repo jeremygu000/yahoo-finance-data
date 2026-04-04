@@ -11,6 +11,7 @@ import DataTable from "@/components/DataTable";
 import VixDashboard from "@/components/VixDashboard";
 import IndicatorChart from "@/components/IndicatorChart";
 import AlertManager from "@/components/AlertManager";
+import AISummary from "@/components/AISummary";
 
 function SectionHeader({ num, title }: { num: string; title: string }) {
   return (
@@ -81,9 +82,14 @@ export default function Home() {
             <IndicatorChart />
           </Box>
 
-          <Box component="section" id="alerts" sx={{ scrollMarginTop: 32, pb: 8 }}>
+          <Box component="section" id="alerts" sx={{ scrollMarginTop: 32 }}>
             <SectionHeader num="07" title="Price Alerts" />
             <AlertManager />
+          </Box>
+
+          <Box component="section" id="ai-summary" sx={{ scrollMarginTop: 32, pb: 8 }}>
+            <SectionHeader num="08" title="AI Summary" />
+            <AISummary />
           </Box>
         </Box>
       </Box>
