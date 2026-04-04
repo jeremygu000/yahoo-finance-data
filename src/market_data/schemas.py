@@ -234,3 +234,20 @@ class FundamentalsResponse(BaseModel):
     beta: float | None = None
     currency: str | None = None
     quote_type: str | None = None
+
+
+class NewsArticle(BaseModel):
+    uuid: str | None = None
+    title: str | None = None
+    link: str | None = None
+    publisher: str | None = None
+    provider_publish_time: int | None = None
+    type: str | None = None
+    related_tickers: list[str] | None = None
+    thumbnail_url: str | None = None
+
+
+class NewsResponse(BaseModel):
+    ticker: str
+    count: int
+    articles: list[NewsArticle]

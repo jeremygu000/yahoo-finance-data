@@ -19,6 +19,7 @@ import type {
   ChatRequest,
   HeatmapItem,
   FundamentalsResponse,
+  NewsResponse,
 } from "./types";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8100";
@@ -163,6 +164,10 @@ export async function fetchHeatmap(): Promise<HeatmapItem[]> {
 
 export async function fetchFundamentals(ticker: string): Promise<FundamentalsResponse> {
   return fetcher<FundamentalsResponse>(`/api/v1/fundamentals/${encodeURIComponent(ticker)}`);
+}
+
+export async function fetchNews(ticker: string, count = 10): Promise<NewsResponse> {
+  return fetcher<NewsResponse>(`/api/v1/news/${encodeURIComponent(ticker)}?count=${count}`);
 }
 
 export async function testAlertNotification(alertId: string): Promise<{ status: string; results?: Record<string, boolean> }> {

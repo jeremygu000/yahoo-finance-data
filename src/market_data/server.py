@@ -26,6 +26,7 @@ from market_data import duckdb_reader, store, watchlist
 from market_data import alerts as alerts_mod
 from market_data import ai_summary as ai_mod
 from market_data import fundamentals as fundamentals_mod
+from market_data import news as news_mod
 from market_data import indicators as indicators_mod
 from market_data import notifications as notif_mod
 from market_data import portfolio as portfolio_mod
@@ -56,6 +57,8 @@ from market_data.schemas import (
     HoldingResponse,
     IndicatorPoint,
     LatestQuote,
+    NewsArticle,
+    NewsResponse,
     OHLCVBar,
     PortfolioAddRequest,
     PortfolioResponse,
@@ -792,6 +795,29 @@ async def get_fundamentals(ticker: str) -> FundamentalsResponse:
     )
 
 
+@v1.get("/news/{ticker}", response_model=NewsResponse)
+async def get_news(ticker: str, count: int = Query(10, ge=1, le=30)) -> NewsResponse:
+    raw = await asyncio.to_thread(news_mod.get_news, ticker, count)
+    articles = [
+        NewsArticle(
+            uuid=a.get("uuid"),
+            title=a.get("title"),
+            link=a.get("link"),
+            publisher=a.get("publisher"),
+            provider_publish_time=a.get("providerPublishTime"),
+            type=a.get("type"),
+            related_tickers=a.get("relatedTickers"),
+            thumbnail_url=a.get("thumbnail_url"),
+        )
+        for a in raw.get("articles", [])
+    ]
+    return NewsResponse(
+        ticker=raw["ticker"],
+        count=raw["count"],
+        articles=articles,
+    )
+
+
 @v1.get("/ai/health")
 async def ai_health() -> dict[str, bool]:
     ok = await ai_mod.health_check()
@@ -875,6 +901,7 @@ legacy.add_api_route("/portfolio/{ticker}", delete_from_portfolio, methods=["DEL
 legacy.add_api_route("/portfolio/summary", get_portfolio_summary, methods=["GET"])
 legacy.add_api_route("/search", search_tickers, methods=["GET"])
 legacy.add_api_route("/fundamentals/{ticker}", get_fundamentals, methods=["GET"])
+legacy.add_api_route("/news/{ticker}", get_news, methods=["GET"])
 legacy.add_api_route("/ai/health", ai_health, methods=["GET"])
 legacy.add_api_route("/ai/summary", ai_summary, methods=["POST"])
 legacy.add_api_route("/ai/summary/stream", ai_summary_stream, methods=["POST"])

@@ -277,6 +277,24 @@ export interface FundamentalsResponse {
   quote_type: string | null;
 }
 
+// --- News Types ---
+export interface NewsArticle {
+  uuid: string | null;
+  title: string | null;
+  link: string | null;
+  publisher: string | null;
+  provider_publish_time: number | null;
+  type: string | null;
+  related_tickers: string[] | null;
+  thumbnail_url: string | null;
+}
+
+export interface NewsResponse {
+  ticker: string;
+  count: number;
+  articles: NewsArticle[];
+}
+
 export const INDICATOR_COLORS: Record<string, string> = {
   SMA: "#3b89ff",
   EMA: "#ff6b35",

@@ -22,6 +22,7 @@ import LightModeIcon from "@mui/icons-material/LightMode";
 import DarkModeIcon from "@mui/icons-material/DarkMode";
 import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
 import AssessmentIcon from "@mui/icons-material/Assessment";
+import NewspaperIcon from "@mui/icons-material/Newspaper";
 import { useThemeMode } from "./ThemeProvider";
 import { useLivePrices } from "./PriceProvider";
 import TickerSearch from "./TickerSearch";
@@ -37,6 +38,7 @@ const NAV_ITEMS = [
   { id: "vix", label: "VIX", Icon: SpeedIcon },
   { id: "indicators", label: "Indicators", Icon: TimelineIcon },
   { id: "alerts", label: "Alerts", Icon: NotificationsIcon },
+  { id: "news", label: "News", Icon: NewspaperIcon },
   { id: "ai-summary", label: "AI Summary", Icon: AutoAwesomeIcon },
 ] as const;
 

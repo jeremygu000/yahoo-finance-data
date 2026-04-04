@@ -13,6 +13,7 @@ import IndicatorChart from "@/components/IndicatorChart";
 import AlertManager from "@/components/AlertManager";
 import AISummary from "@/components/AISummary";
 import FundamentalsCard from "@/components/FundamentalsCard";
+import NewsFeed from "@/components/NewsFeed";
 
 function SectionHeader({ num, title }: { num: string; title: string }) {
   return (
@@ -93,8 +94,13 @@ export default function Home() {
             <AlertManager />
           </Box>
 
+          <Box component="section" id="news" sx={{ scrollMarginTop: 32 }}>
+            <SectionHeader num="09" title="Market News" />
+            <NewsFeed />
+          </Box>
+
           <Box component="section" id="ai-summary" sx={{ scrollMarginTop: 32, pb: 8 }}>
-            <SectionHeader num="09" title="AI Summary" />
+            <SectionHeader num="10" title="AI Summary" />
             <AISummary />
           </Box>
         </Box>
