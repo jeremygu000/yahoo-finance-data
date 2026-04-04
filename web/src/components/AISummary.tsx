@@ -9,11 +9,10 @@ import Chip from "@mui/material/Chip";
 import Paper from "@mui/material/Paper";
 import Switch from "@mui/material/Switch";
 import FormControlLabel from "@mui/material/FormControlLabel";
-import Checkbox from "@mui/material/Checkbox";
-import Tooltip from "@mui/material/Tooltip";
+import Autocomplete from "@mui/material/Autocomplete";
+import TextField from "@mui/material/TextField";
 import Collapse from "@mui/material/Collapse";
 import IconButton from "@mui/material/IconButton";
-import TextField from "@mui/material/TextField";
 import SendIcon from "@mui/icons-material/Send";
 import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
 import WifiOffIcon from "@mui/icons-material/WifiOff";
@@ -135,12 +134,6 @@ export default function AISummary() {
       setThinkingExpanded(false);
     }
   }, [thinkingDone]);
-
-  const toggleTicker = (ticker: string) => {
-    setSelectedTickers((prev) =>
-      prev.includes(ticker) ? prev.filter((t) => t !== ticker) : [...prev, ticker],
-    );
-  };
 
   const selectAll = () => setSelectedTickers([...tickers]);
   const deselectAll = () => setSelectedTickers([]);
@@ -337,54 +330,37 @@ export default function AISummary() {
               </Typography>
             </Box>
           ) : (
-            <Box
-              sx={{
-                display: "flex",
-                flexWrap: "wrap",
-                gap: 0.5,
-                maxHeight: 120,
-                overflowY: "auto",
-                "&::-webkit-scrollbar": { width: 4 },
-                "&::-webkit-scrollbar-track": { bgcolor: "transparent" },
-                "&::-webkit-scrollbar-thumb": { bgcolor: "rgba(255,255,255,0.08)", borderRadius: 2 },
-              }}
-            >
-              {tickers.map((ticker) => {
-                const checked = selectedTickers.includes(ticker);
-                return (
-                  <Tooltip key={ticker} title={ticker} placement="top">
-                    <FormControlLabel
-                      control={
-                        <Checkbox
-                          size="small"
-                          checked={checked}
-                          onChange={() => toggleTicker(ticker)}
-                          sx={{
-                            p: 0.25,
-                            color: "text.disabled",
-                            "&.Mui-checked": { color: "#3b89ff" },
-                          }}
-                        />
-                      }
-                      label={
-                        <Typography
-                          sx={{
-                            fontFamily: "var(--font-geist-mono)",
-                            fontSize: "0.75rem",
-                            fontWeight: checked ? 600 : 400,
-                            color: checked ? "#3b89ff" : "text.secondary",
-                            transition: "color 0.15s ease",
-                          }}
-                        >
-                          {ticker}
-                        </Typography>
-                      }
-                      sx={{ m: 0, mr: 0.5 }}
+            <Autocomplete
+              multiple
+              size="small"
+              options={tickers}
+              value={selectedTickers}
+              onChange={(_, v) => setSelectedTickers(v)}
+              disableCloseOnSelect
+              limitTags={8}
+              renderTags={(value, getTagProps) =>
+                value.map((option, index) => {
+                  const { key, ...tagProps } = getTagProps({ index });
+                  return (
+                    <Chip
+                      key={key}
+                      label={option}
+                      size="small"
+                      {...tagProps}
+                      sx={{
+                        fontFamily: "var(--font-geist-mono)",
+                        fontSize: "0.7rem",
+                        fontWeight: 600,
+                        height: 22,
+                      }}
                     />
-                  </Tooltip>
-                );
-              })}
-            </Box>
+                  );
+                })
+              }
+              renderInput={(params) => (
+                <TextField {...params} placeholder={selectedTickers.length === 0 ? "Search tickers..." : ""} />
+              )}
+            />
           )}
           {selectedTickers.length > 0 && (
             <Typography sx={{ fontFamily: "var(--font-geist-mono)", fontSize: "0.65rem", color: "text.disabled", mt: 0.75 }}>

@@ -13,6 +13,8 @@ import Box from "@mui/material/Box";
 import Card from "@mui/material/Card";
 import CardContent from "@mui/material/CardContent";
 import Chip from "@mui/material/Chip";
+import Autocomplete from "@mui/material/Autocomplete";
+import TextField from "@mui/material/TextField";
 import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Alert from "@mui/material/Alert";
@@ -52,7 +54,7 @@ export default function PriceComparison() {
 
   const { tickers } = useTickers();
   const [days, setDays] = useState<Days>(90);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [selected, setSelected] = useState<string[]>([]);
   const [data, setData] = useState<CompareData>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -60,10 +62,10 @@ export default function PriceComparison() {
   const { mode } = useThemeMode();
 
   useEffect(() => {
-    if (tickers.length > 0 && selected.size === 0) {
-      setSelected(new Set(tickers.slice(0, 3)));
+    if (tickers.length > 0 && selected.length === 0) {
+      setSelected(tickers.slice(0, 3));
     }
-  }, [tickers, selected.size]);
+  }, [tickers, selected.length]);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -108,11 +110,11 @@ export default function PriceComparison() {
 
   useEffect(() => {
     async function load() {
-      if (selected.size === 0) return;
+      if (selected.length === 0) return;
       setLoading(true);
       setError(null);
       try {
-        const result = await fetchCompare(Array.from(selected), days);
+        const result = await fetchCompare(selected, days);
         setData(result);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Failed to load");
@@ -163,63 +165,62 @@ export default function PriceComparison() {
     chart.timeScale().fitContent();
   }, [data, tickers]);
 
-  function toggleTicker(t: string) {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(t)) {
-        if (next.size === 1) return prev;
-        next.delete(t);
-      } else {
-        next.add(t);
-      }
-      return next;
-    });
-  }
-
   return (
     <Card>
       <CardContent sx={{ p: 3 }}>
         <Box sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 2, mb: 3 }}>
-          <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
-            {tickers.map((t) => {
-              const active = selected.has(t);
-              const color = getTickerColor(t, tickers);
-              return (
-                <Chip
-                  key={t}
-                  label={t}
-                  onClick={() => toggleTicker(t)}
-                  size="small"
-                  sx={{
-                    fontFamily: "var(--font-geist-mono)",
-                    fontWeight: 600,
-                    fontSize: "0.75rem",
-                    cursor: "pointer",
-                    bgcolor: active ? `${color}22` : "transparent",
-                    color: active ? color : "text.disabled",
-                    border: "1px solid",
-                    borderColor: active ? `${color}55` : "divider",
-                    "&:hover": {
-                      bgcolor: active ? `${color}33` : "action.hover",
-                    },
-                  }}
-                  icon={
-                    <Box
-                      component="span"
-                      sx={{
-                        width: 7,
-                        height: 7,
-                        borderRadius: "50%",
-                        bgcolor: active ? color : "divider",
-                        ml: "6px !important",
-                        mr: "-2px !important",
-                      }}
-                    />
-                  }
-                />
-              );
-            })}
-          </Box>
+          <Autocomplete
+            multiple
+            size="small"
+            options={tickers}
+            value={selected}
+            onChange={(_, v) => setSelected(v)}
+            disableCloseOnSelect
+            limitTags={8}
+            sx={{ minWidth: 300, flex: 1 }}
+            renderTags={(value, getTagProps) =>
+              value.map((option, index) => {
+                const { key, ...tagProps } = getTagProps({ index });
+                const color = getTickerColor(option, tickers);
+                return (
+                  <Chip
+                    key={key}
+                    label={option}
+                    size="small"
+                    {...tagProps}
+                    sx={{
+                      fontFamily: "var(--font-geist-mono)",
+                      fontWeight: 600,
+                      fontSize: "0.75rem",
+                      bgcolor: `${color}22`,
+                      color: color,
+                      border: "1px solid",
+                      borderColor: `${color}55`,
+                    }}
+                    icon={
+                      <Box
+                        component="span"
+                        sx={{
+                          width: 7,
+                          height: 7,
+                          borderRadius: "50%",
+                          bgcolor: color,
+                          ml: "6px !important",
+                          mr: "-2px !important",
+                        }}
+                      />
+                    }
+                  />
+                );
+              })
+            }
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                placeholder={selected.length === 0 ? "Search tickers..." : ""}
+              />
+            )}
+          />
 
           <Box sx={{ ml: "auto" }}>
             <ToggleButtonGroup

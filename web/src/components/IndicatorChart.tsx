@@ -18,6 +18,8 @@ import Select from "@mui/material/Select";
 import MenuItem from "@mui/material/MenuItem";
 import FormControl from "@mui/material/FormControl";
 import InputLabel from "@mui/material/InputLabel";
+import Autocomplete from "@mui/material/Autocomplete";
+import TextField from "@mui/material/TextField";
 import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Alert from "@mui/material/Alert";
@@ -347,16 +349,15 @@ export default function IndicatorChart() {
     <Card>
       <CardContent sx={{ p: 3 }}>
         <Box sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 2, mb: 3 }}>
-          <FormControl size="small" sx={{ minWidth: 100 }}>
-            <InputLabel>Ticker</InputLabel>
-            <Select value={ticker} label="Ticker" onChange={(e) => setTicker(e.target.value)}>
-              {tickers.map((t) => (
-                <MenuItem key={t} value={t}>
-                  {t}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
+          <Autocomplete
+            size="small"
+            options={tickers}
+            value={ticker}
+            onChange={(_, v) => { if (v) setTicker(v); }}
+            disableClearable
+            sx={{ minWidth: 140 }}
+            renderInput={(params) => <TextField {...params} label="Ticker" />}
+          />
 
           <FormControl size="small" sx={{ minWidth: 140 }}>
             <InputLabel>Indicator</InputLabel>

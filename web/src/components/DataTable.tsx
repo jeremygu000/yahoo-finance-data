@@ -13,10 +13,8 @@ import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import TableSortLabel from "@mui/material/TableSortLabel";
 import TablePagination from "@mui/material/TablePagination";
-import Select from "@mui/material/Select";
-import MenuItem from "@mui/material/MenuItem";
-import FormControl from "@mui/material/FormControl";
-import InputLabel from "@mui/material/InputLabel";
+import Autocomplete from "@mui/material/Autocomplete";
+import TextField from "@mui/material/TextField";
 import Skeleton from "@mui/material/Skeleton";
 import Alert from "@mui/material/Alert";
 import { fetchOHLCV } from "@/lib/api";
@@ -111,16 +109,15 @@ export default function DataTable() {
     <Card>
       <CardContent sx={{ p: 3 }}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 2, mb: 3 }}>
-          <FormControl size="small" sx={{ minWidth: 100 }}>
-            <InputLabel>Ticker</InputLabel>
-            <Select value={ticker} label="Ticker" onChange={(e) => setTicker(e.target.value)}>
-              {tickers.map((t) => (
-                <MenuItem key={t} value={t}>
-                  {t}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
+          <Autocomplete
+            size="small"
+            options={tickers}
+            value={ticker}
+            onChange={(_, v) => { if (v) setTicker(v); }}
+            disableClearable
+            sx={{ minWidth: 140 }}
+            renderInput={(params) => <TextField {...params} label="Ticker" />}
+          />
           {!loading && (
             <Typography
               variant="caption"

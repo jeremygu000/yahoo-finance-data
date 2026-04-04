@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import TextField from "@mui/material/TextField";
+import Autocomplete from "@mui/material/Autocomplete";
 import Select from "@mui/material/Select";
 import MenuItem from "@mui/material/MenuItem";
 import InputLabel from "@mui/material/InputLabel";
@@ -25,6 +26,7 @@ import AddIcon from "@mui/icons-material/Add";
 
 import { fetchAlerts, createAlert, deleteAlert, fetchAlertChannels, testAlertNotification } from "@/lib/api";
 import type { AlertResponse, AlertCondition } from "@/lib/types";
+import useTickers from "@/lib/useTickers";
 
 const CONDITION_OPTIONS: { value: AlertCondition; label: string }[] = [
   { value: "above", label: "Price Above" },
@@ -72,6 +74,7 @@ const DEFAULT_FORM: FormState = {
 };
 
 export default function AlertManager() {
+  const { tickers } = useTickers();
   const [alerts, setAlerts] = useState<AlertResponse[]>([]);
   const [channels, setChannels] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -237,13 +240,25 @@ export default function AlertManager() {
         </Box>
 
         <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 2, mb: 2 }}>
-          <TextField
-            label="Ticker"
+          <Autocomplete
             size="small"
+            freeSolo
+            options={tickers}
             value={form.ticker}
-            onChange={(e) => setForm((p) => ({ ...p, ticker: e.target.value.toUpperCase() }))}
-            placeholder="AAPL"
-            inputProps={{ style: { fontFamily: "var(--font-geist-mono)", fontWeight: 600, fontSize: "0.875rem" } }}
+            onChange={(_, v) => setForm((p) => ({ ...p, ticker: (v ?? "").toUpperCase() }))}
+            onInputChange={(_, v) => setForm((p) => ({ ...p, ticker: v.toUpperCase() }))}
+            sx={{ minWidth: 140 }}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                label="Ticker"
+                placeholder="AAPL"
+                inputProps={{
+                  ...params.inputProps,
+                  style: { fontFamily: "var(--font-geist-mono)", fontWeight: 600, fontSize: "0.875rem" },
+                }}
+              />
+            )}
           />
 
           <FormControl size="small">
