@@ -17,16 +17,28 @@ from market_data.config import DATA_DIR, VALID_INTERVALS
 
 logger = logging.getLogger(__name__)
 
-_local = threading.local()
+_conn_lock = threading.Lock()
+_conn: duckdb.DuckDBPyConnection | None = None
 
 
 def _get_conn(data_dir: Path = DATA_DIR) -> duckdb.DuckDBPyConnection:
-    """Return a thread-local in-memory DuckDB connection."""
-    conn: duckdb.DuckDBPyConnection | None = getattr(_local, "conn", None)
-    if conn is None:
-        conn = duckdb.connect(":memory:")
-        _local.conn = conn
-    return conn
+    """Return a module-level shared in-memory DuckDB connection.
+
+    DuckDB supports concurrent reads via .cursor(), so a single connection
+    shared across threads is both safe and avoids per-thread startup cost.
+    """
+    global _conn
+    if _conn is not None:
+        return _conn
+    with _conn_lock:
+        if _conn is None:
+            _conn = duckdb.connect(":memory:", read_only=False)
+            _conn.execute("SET threads = 4")
+        return _conn
+
+
+def _cursor(data_dir: Path = DATA_DIR) -> duckdb.DuckDBPyConnection:
+    return _get_conn(data_dir).cursor()
 
 
 def _glob_pattern(data_dir: Path, interval: str | None = None) -> str:
@@ -60,7 +72,7 @@ def batch_status(data_dir: Path = DATA_DIR) -> list[dict[str, object]]:
     if not data_dir.exists() or not list(data_dir.glob("*.parquet")):
         return []
 
-    conn = _get_conn(data_dir)
+    conn = _cursor(data_dir)
     try:
         result = conn.execute(
             """
@@ -113,7 +125,7 @@ def batch_status_paginated(
         return {"items": [], "total": 0, "page": page, "page_size": page_size, "total_pages": 0}
 
     pattern = _glob_pattern(data_dir)
-    conn = _get_conn(data_dir)
+    conn = _cursor(data_dir)
 
     # Phase 1: Get all ticker metadata with a single scan
     try:
@@ -246,7 +258,7 @@ def batch_latest(
     if not existing_files:
         return {}
 
-    conn = _get_conn(data_dir)
+    conn = _cursor(data_dir)
     result: dict[str, dict[str, object]] = {}
 
     for ticker, filepath in existing_files:
@@ -305,7 +317,7 @@ def batch_load(
     if not existing_files:
         return {}
 
-    conn = _get_conn(data_dir)
+    conn = _cursor(data_dir)
     result: dict[str, pd.DataFrame] = {}
 
     col_clause = ", ".join(f'"{c}"' for c in columns) if columns else "*"

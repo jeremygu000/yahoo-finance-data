@@ -149,6 +149,27 @@ async def logging_and_error_middleware(request: Request, call_next: Any) -> Resp
 
     client_ip = request.client.host if request.client else "unknown"
 
+    if _is_rate_limited(client_ip):
+        elapsed_ms = (time.monotonic() - start) * 1000
+        logger.warning(
+            "%s %s -> 429 rate limited",
+            request.method,
+            request.url.path,
+            extra={
+                "request_id": request_id,
+                "client_ip": client_ip,
+                "latency_ms": round(elapsed_ms, 1),
+            },
+        )
+        return JSONResponse(
+            status_code=429,
+            content={"error": "Rate limit exceeded"},
+            headers={
+                "X-Request-ID": request_id,
+                "retry-after": str(RATE_LIMIT_WINDOW),
+            },
+        )
+
     # Check API key auth if configured
     if API_KEY is not None:
         # Skip auth for these paths
