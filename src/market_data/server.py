@@ -136,8 +136,8 @@ class _WSCORSBypass:
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,
-    allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "X-API-Key", "X-Request-ID"],
 )
 app.add_middleware(_WSCORSBypass)
 
@@ -173,7 +173,7 @@ async def logging_and_error_middleware(request: Request, call_next: Any) -> Resp
     # Check API key auth if configured
     if API_KEY is not None:
         # Skip auth for these paths
-        skip_auth_paths = {"/health", "/ready", "/docs", "/openapi.json", "/ws/prices"}
+        skip_auth_paths = {"/health", "/ready", "/docs", "/openapi.json"}
         if request.url.path not in skip_auth_paths:
             provided_key = request.headers.get("X-API-Key")
             if provided_key != API_KEY:
@@ -201,6 +201,9 @@ async def logging_and_error_middleware(request: Request, call_next: Any) -> Resp
             },
         )
         response.headers["X-Request-ID"] = request_id
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         return response
     except Exception:
         elapsed_ms = (time.monotonic() - start) * 1000
@@ -296,6 +299,12 @@ async def _poll_prices() -> None:
 
 @app.websocket("/ws/prices")
 async def ws_prices(ws: WebSocket) -> None:
+    # Validate API key via query param (browsers can't send custom headers on WS)
+    if API_KEY is not None:
+        token = ws.query_params.get("api_key", "")
+        if token != API_KEY:
+            await ws.close(code=1008, reason="Unauthorized")
+            return
     await ws.accept()
     _ws_clients.add(ws)
     logger.info("ws client connected", extra={"client_ip": ws.client.host if ws.client else "unknown"})

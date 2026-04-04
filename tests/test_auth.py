@@ -70,3 +70,51 @@ class TestAuth:
         data = resp.json()
         assert "status" in data
         assert "data_dir_exists" in data
+
+
+class TestWebSocketAuth:
+    """Test WebSocket endpoint authentication via query parameter."""
+
+    def test_ws_no_api_key_configured_allows_connection(self) -> None:
+        client = TestClient(app, raise_server_exceptions=False)
+        with patch("market_data.server.API_KEY", None):
+            with client.websocket_connect("/ws/prices") as ws:
+                ws.close()
+
+    def test_ws_correct_api_key_allows_connection(self) -> None:
+        client = TestClient(app, raise_server_exceptions=False)
+        with patch("market_data.server.API_KEY", "ws-secret"):
+            with client.websocket_connect("/ws/prices?api_key=ws-secret") as ws:
+                ws.close()
+
+    def test_ws_wrong_api_key_rejects_connection(self) -> None:
+        client = TestClient(app, raise_server_exceptions=False)
+        with patch("market_data.server.API_KEY", "ws-secret"):
+            try:
+                with client.websocket_connect("/ws/prices?api_key=wrong") as ws:
+                    ws.close()
+                assert False, "Expected WebSocket to be rejected"
+            except Exception:
+                pass
+
+    def test_ws_missing_api_key_rejects_connection(self) -> None:
+        client = TestClient(app, raise_server_exceptions=False)
+        with patch("market_data.server.API_KEY", "ws-secret"):
+            try:
+                with client.websocket_connect("/ws/prices") as ws:
+                    ws.close()
+                assert False, "Expected WebSocket to be rejected"
+            except Exception:
+                pass
+
+
+class TestSecurityHeaders:
+    """Test security response headers are present."""
+
+    def test_response_includes_security_headers(self) -> None:
+        client = TestClient(app, raise_server_exceptions=False)
+        resp = client.get("/health")
+        assert resp.headers["X-Content-Type-Options"] == "nosniff"
+        assert resp.headers["X-Frame-Options"] == "DENY"
+        assert resp.headers["Referrer-Policy"] == "strict-origin-when-cross-origin"
+        assert "X-Request-ID" in resp.headers

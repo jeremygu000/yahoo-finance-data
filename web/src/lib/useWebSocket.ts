@@ -3,7 +3,9 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import type { PriceUpdate, WSMessage, AlertTriggered } from "./types";
 
-const WS_URL = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8100").replace(/^http/, "ws") + "/ws/prices";
+const WS_BASE = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8100").replace(/^http/, "ws");
+const WS_API_KEY = process.env.NEXT_PUBLIC_API_KEY ?? "";
+const WS_URL = WS_BASE + "/ws/prices" + (WS_API_KEY ? `?api_key=${encodeURIComponent(WS_API_KEY)}` : "");
 const RECONNECT_DELAY_MS = 3000;
 const MAX_RECONNECT_ATTEMPTS = 10;
 const MAX_ALERTS = 10;

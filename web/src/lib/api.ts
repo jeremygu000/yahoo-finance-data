@@ -20,9 +20,17 @@ import type {
 } from "./types";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8100";
+const API_KEY = process.env.NEXT_PUBLIC_API_KEY ?? "";
+
+function authHeaders(extra: Record<string, string> = {}): Record<string, string> {
+  const h: Record<string, string> = { ...extra };
+  if (API_KEY) h["X-API-Key"] = API_KEY;
+  return h;
+}
 
 async function fetcher<T>(path: string): Promise<T> {
   const res = await fetch(`${BASE_URL}${path}`, {
+    headers: authHeaders(),
     next: { revalidate: 0 },
   });
   if (!res.ok) {
@@ -94,7 +102,7 @@ export async function fetchPortfolio(): Promise<PortfolioResponse> {
 export async function addHolding(data: PortfolioAddRequest): Promise<PortfolioResponse> {
   const res = await fetch(`${BASE_URL}/api/v1/portfolio`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: authHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(data),
   });
   if (!res.ok) throw new Error(`API error ${res.status}: POST /api/v1/portfolio`);
@@ -104,7 +112,7 @@ export async function addHolding(data: PortfolioAddRequest): Promise<PortfolioRe
 export async function updateHolding(ticker: string, data: PortfolioUpdateRequest): Promise<PortfolioResponse> {
   const res = await fetch(`${BASE_URL}/api/v1/portfolio/${ticker}`, {
     method: "PUT",
-    headers: { "Content-Type": "application/json" },
+    headers: authHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(data),
   });
   if (!res.ok) throw new Error(`API error ${res.status}: PUT /api/v1/portfolio/${ticker}`);
@@ -112,7 +120,7 @@ export async function updateHolding(ticker: string, data: PortfolioUpdateRequest
 }
 
 export async function deleteHolding(ticker: string): Promise<PortfolioResponse> {
-  const res = await fetch(`${BASE_URL}/api/v1/portfolio/${ticker}`, { method: "DELETE" });
+  const res = await fetch(`${BASE_URL}/api/v1/portfolio/${ticker}`, { method: "DELETE", headers: authHeaders() });
   if (!res.ok) throw new Error(`API error ${res.status}: DELETE /api/v1/portfolio/${ticker}`);
   return res.json() as Promise<PortfolioResponse>;
 }
@@ -129,7 +137,7 @@ export async function fetchAlerts(ticker?: string): Promise<AlertListResponse> {
 export async function createAlert(data: AlertCreateRequest): Promise<AlertResponse> {
   const res = await fetch(`${BASE_URL}/api/v1/alerts`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: authHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(data),
   });
   if (!res.ok) throw new Error(`API error ${res.status}: POST /api/v1/alerts`);
@@ -137,7 +145,7 @@ export async function createAlert(data: AlertCreateRequest): Promise<AlertRespon
 }
 
 export async function deleteAlert(alertId: string): Promise<AlertListResponse> {
-  const res = await fetch(`${BASE_URL}/api/v1/alerts/${alertId}`, { method: "DELETE" });
+  const res = await fetch(`${BASE_URL}/api/v1/alerts/${alertId}`, { method: "DELETE", headers: authHeaders() });
   if (!res.ok) throw new Error(`API error ${res.status}: DELETE /api/v1/alerts/${alertId}`);
   return res.json() as Promise<AlertListResponse>;
 }
@@ -148,7 +156,7 @@ export async function fetchAlertChannels(): Promise<string[]> {
 }
 
 export async function testAlertNotification(alertId: string): Promise<{ status: string; results?: Record<string, boolean> }> {
-  const res = await fetch(`${BASE_URL}/api/v1/alerts/test/${alertId}`, { method: "POST" });
+  const res = await fetch(`${BASE_URL}/api/v1/alerts/test/${alertId}`, { method: "POST", headers: authHeaders() });
   if (!res.ok) throw new Error(`API error ${res.status}: POST /api/v1/alerts/test/${alertId}`);
   return res.json() as Promise<{ status: string; results?: Record<string, boolean> }>;
 }
@@ -160,7 +168,7 @@ export async function fetchAiHealth(): Promise<{ available: boolean }> {
 export async function fetchAiSummary(req: SummaryRequest): Promise<SummaryResponse> {
   const res = await fetch(`${BASE_URL}/api/v1/ai/summary`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: authHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(req),
   });
   if (!res.ok) throw new Error(`API error ${res.status}: POST /api/v1/ai/summary`);
@@ -174,7 +182,7 @@ export async function streamAiSummary(
 ): Promise<void> {
   const res = await fetch(`${BASE_URL}/api/v1/ai/summary/stream`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: authHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(req),
   });
   if (!res.ok) throw new Error(`API error ${res.status}: POST /api/v1/ai/summary/stream`);
@@ -221,7 +229,7 @@ export async function streamAiChat(
 ): Promise<void> {
   const res = await fetch(`${BASE_URL}/api/v1/ai/chat`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: authHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(req),
   });
   if (!res.ok) throw new Error(`API error ${res.status}: POST /api/v1/ai/chat`);
