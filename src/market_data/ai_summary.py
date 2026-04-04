@@ -11,7 +11,7 @@ from typing import Any
 import httpx
 import pandas as pd
 
-from market_data import store
+from market_data import duckdb_reader, store
 from market_data.config import OLLAMA_HOST, OLLAMA_MODEL, OLLAMA_TIMEOUT
 
 logger = logging.getLogger(__name__)
@@ -101,9 +101,10 @@ def _format_ohlcv_csv(ticker: str, df: pd.DataFrame, tail: int = 10) -> str:
 
 
 def build_prompt(tickers: list[str], days: int = 30) -> str:
+    frames = duckdb_reader.batch_load(tickers, days=days)
     sections: list[str] = []
     for t in tickers:
-        df = store.load(t, days=days)
+        df = frames.get(t, pd.DataFrame())
         if df.empty:
             sections.append(f"Ticker: {t}\nNo data available.")
             continue

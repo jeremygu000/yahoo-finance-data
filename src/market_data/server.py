@@ -22,7 +22,7 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 
 from fastapi.routing import APIRouter
 
-from market_data import store, watchlist
+from market_data import duckdb_reader, store, watchlist
 from market_data import alerts as alerts_mod
 from market_data import ai_summary as ai_mod
 from market_data import indicators as indicators_mod
@@ -232,8 +232,6 @@ async def _broadcast(msg: WSMessage) -> None:
 
 
 async def _poll_prices() -> None:
-    from market_data.api import get_latest as _get_latest
-
     while True:
         await asyncio.sleep(WS_POLL_INTERVAL)
         if not _ws_clients:
@@ -241,12 +239,11 @@ async def _poll_prices() -> None:
         tickers = await asyncio.to_thread(store.list_tickers)
         if not tickers:
             continue
+        latest_map = await asyncio.to_thread(duckdb_reader.batch_latest, tickers)
         updates: list[PriceUpdate] = []
-        for t in tickers:
-            row = await asyncio.to_thread(_get_latest, t)
-            if row:
-                row["ticker"] = t
-                updates.append(PriceUpdate.model_validate(row))
+        for t, row in latest_map.items():
+            row["ticker"] = t
+            updates.append(PriceUpdate.model_validate(row))
         if updates:
             await _broadcast(WSMessage(type="price_update", data=updates))
             alert_store = await asyncio.to_thread(alerts_mod.load_alerts)
@@ -412,12 +409,14 @@ async def get_compare(
             status_code=400,
             content={"error": f"Invalid interval {interval!r}. Valid: {VALID_INTERVALS}"},
         )
+    ticker_list = [t.strip() for t in tickers.split(",") if t.strip()]
+    if not ticker_list:
+        return {}
+    frames = await asyncio.to_thread(
+        duckdb_reader.compare_close, ticker_list, days, DATA_DIR, interval
+    )
     result: dict[str, list[ClosePoint]] = {}
-    for t in tickers.split(","):
-        t = t.strip()
-        if not t:
-            continue
-        df = await asyncio.to_thread(store.load, t, days, DATA_DIR, interval)
+    for t, df in frames.items():
         result[t] = _close_records(df)
     return result
 
@@ -524,7 +523,7 @@ def _indicator_records(result_df: pd.DataFrame) -> list[IndicatorPoint]:
         return []
     ts_index = pd.DatetimeIndex(result_df.index)
     dates = [d.isoformat() for d in ts_index.date]
-    unix_ts = (ts_index.astype("int64") // 10**9).tolist()
+    unix_ts = [int(ts.timestamp()) for ts in ts_index]
     cols = result_df.columns.tolist()
     rows: list[IndicatorPoint] = []
     for i in range(len(result_df)):

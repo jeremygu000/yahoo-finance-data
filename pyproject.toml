@@ -9,6 +9,7 @@ dependencies = [
     "yfinance>=0.2.40",
     "pandas>=2.2",
     "pyarrow>=17.0",
+    "duckdb>=1.2",
     "fastapi>=0.135.3",
     "uvicorn>=0.42.0",
     "requests>=2.31",

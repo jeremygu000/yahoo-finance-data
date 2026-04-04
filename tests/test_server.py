@@ -177,7 +177,7 @@ class TestCompare:
     def test_multiple_tickers(self, sample_ohlcv) -> None:
         df = sample_ohlcv(days=5)
 
-        with patch("market_data.server.store.load", return_value=df):
+        with patch("market_data.server.duckdb_reader.compare_close", return_value={"AAPL": df, "GOOG": df}):
             resp = client.get("/api/compare", params={"tickers": "AAPL,GOOG"})
 
         assert resp.status_code == 200
@@ -255,7 +255,7 @@ class TestGetOhlcvInterval:
     def test_compare_with_interval(self, sample_ohlcv) -> None:
         df = sample_ohlcv(days=5)
 
-        with patch("market_data.server.store.load", return_value=df):
+        with patch("market_data.server.duckdb_reader.compare_close", return_value={"AAPL": df, "GOOG": df}):
             resp = client.get("/api/v1/compare", params={"tickers": "AAPL,GOOG", "interval": "1h"})
 
         assert resp.status_code == 200

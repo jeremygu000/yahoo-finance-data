@@ -142,35 +142,9 @@ def list_tickers(data_dir: Path = DATA_DIR) -> list[str]:
 
 
 def status(data_dir: Path = DATA_DIR) -> list[dict[str, object]]:
-    if not data_dir.exists():
-        return []
+    from market_data.duckdb_reader import batch_status
 
-    result = []
-    for path in sorted(data_dir.glob("*.parquet")):
-        df = pd.read_parquet(path)
-        if df.empty:
-            continue
-
-        stem = path.stem
-        parts = stem.rsplit("_", 1)
-        if len(parts) == 2 and parts[1] in VALID_INTERVALS:
-            ticker_name = parts[0]
-            interval_name = parts[1]
-        else:
-            ticker_name = stem
-            interval_name = "1d"
-
-        result.append(
-            {
-                "ticker": ticker_name,
-                "interval": interval_name,
-                "rows": len(df),
-                "first_date": df.index.min().date().isoformat(),
-                "last_date": df.index.max().date().isoformat(),
-                "size_kb": round(path.stat().st_size / 1024, 1),
-            }
-        )
-    return result
+    return batch_status(data_dir=data_dir)
 
 
 def status_paginated(
@@ -179,86 +153,9 @@ def status_paginated(
     search: str = "",
     data_dir: Path = DATA_DIR,
 ) -> dict[str, object]:
-    """Return paginated ticker overview with latest quote included.
+    from market_data.duckdb_reader import batch_status_paginated
 
-    Avoids reading every parquet for filtering: uses file metadata first,
-    then only reads full data for tickers on the requested page.
-    """
-    if not data_dir.exists():
-        return {"items": [], "total": 0, "page": page, "page_size": page_size, "total_pages": 0}
-
-    # Phase 1: collect all ticker paths (cheap — just filesystem)
-    entries: list[tuple[str, str, Path]] = []
-    for path in sorted(data_dir.glob("*.parquet")):
-        stem = path.stem
-        parts = stem.rsplit("_", 1)
-        if len(parts) == 2 and parts[1] in VALID_INTERVALS:
-            ticker_name = parts[0]
-            interval_name = parts[1]
-        else:
-            ticker_name = stem
-            interval_name = "1d"
-
-        if search and search.upper() not in ticker_name.upper():
-            continue
-
-        entries.append((ticker_name, interval_name, path))
-
-    total = len(entries)
-    total_pages = max(1, (total + page_size - 1) // page_size)
-    page = max(1, min(page, total_pages))
-
-    start = (page - 1) * page_size
-    page_entries = entries[start : start + page_size]
-
-    # Phase 2: only read parquet files for the current page
-    items: list[dict[str, object]] = []
-    for ticker_name, interval_name, path in page_entries:
-        df = pd.read_parquet(path)
-        if df.empty:
-            continue
-
-        latest: dict[str, object] | None = None
-        change: float | None = None
-        change_pct: float | None = None
-
-        if len(df) > 0:
-            last_row = df.iloc[-1]
-            close_val = float(last_row.get("Close", 0))
-            open_val = float(last_row.get("Open", 0))
-            latest = {
-                "date": df.index[-1].date().isoformat(),
-                "open": open_val,
-                "high": float(last_row.get("High", 0)),
-                "low": float(last_row.get("Low", 0)),
-                "close": close_val,
-                "volume": int(last_row.get("Volume", 0)),
-            }
-            if open_val != 0:
-                change = round(close_val - open_val, 4)
-                change_pct = round(((close_val - open_val) / open_val) * 100, 4)
-
-        items.append(
-            {
-                "ticker": ticker_name,
-                "interval": interval_name,
-                "rows": len(df),
-                "first_date": df.index.min().date().isoformat(),
-                "last_date": df.index.max().date().isoformat(),
-                "size_kb": round(path.stat().st_size / 1024, 1),
-                "latest": latest,
-                "change": change,
-                "change_pct": change_pct,
-            }
-        )
-
-    return {
-        "items": items,
-        "total": total,
-        "page": page,
-        "page_size": page_size,
-        "total_pages": total_pages,
-    }
+    return batch_status_paginated(page=page, page_size=page_size, search=search, data_dir=data_dir)
 
 
 def clean(keep_days: int = 365, data_dir: Path = DATA_DIR) -> dict[str, int]:

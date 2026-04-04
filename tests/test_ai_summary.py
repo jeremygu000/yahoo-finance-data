@@ -59,19 +59,19 @@ class TestFormatOhlcvCsv:
 
 
 class TestBuildPrompt:
-    @patch("market_data.ai_summary.store")
-    def test_with_data(self, mock_store: MagicMock) -> None:
-        mock_store.load.return_value = _make_df(5)
+    @patch("market_data.ai_summary.duckdb_reader")
+    def test_with_data(self, mock_reader: MagicMock) -> None:
+        mock_reader.batch_load.return_value = {"AAPL": _make_df(5), "MSFT": _make_df(5)}
         result = build_prompt(["AAPL", "MSFT"], days=30)
         assert "2 tickers" in result
         assert "30-day" in result
         assert "AAPL" in result
         assert "MSFT" in result
-        assert mock_store.load.call_count == 2
+        mock_reader.batch_load.assert_called_once_with(["AAPL", "MSFT"], days=30)
 
-    @patch("market_data.ai_summary.store")
-    def test_empty_data(self, mock_store: MagicMock) -> None:
-        mock_store.load.return_value = pd.DataFrame()
+    @patch("market_data.ai_summary.duckdb_reader")
+    def test_empty_data(self, mock_reader: MagicMock) -> None:
+        mock_reader.batch_load.return_value = {}
         result = build_prompt(["AAPL"])
         assert "No data available" in result
 
