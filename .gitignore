@@ -10,7 +10,10 @@ wheels/
 .venv
 
 # Environment variables
-.env*
+.env
+.env.local
+.env.*.local
+!.env.example
 
 # macOS
 .DS_Store
@@ -24,6 +27,8 @@ wheels/
 
 # Testing / caching
 .pytest_cache/
+.mypy_cache/
+.playwright-mcp/
 
 # Local data
 .market_data/

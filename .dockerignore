@@ -1,0 +1,13 @@
+.git
+.venv
+.mypy_cache
+.pytest_cache
+.opencode
+__pycache__
+*.py[oc]
+*.egg-info
+.env
+.env.local
+.DS_Store
+web/.next
+web/node_modules

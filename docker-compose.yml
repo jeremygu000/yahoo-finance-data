@@ -1,0 +1,52 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8100:8100"
+    volumes:
+      - market_data:/data
+    env_file:
+      - .env
+    environment:
+      - MARKET_DATA_DIR=/data/parquet
+      - MARKET_DATA_LOG_DIR=/data/logs
+      - MARKET_DATA_CORS_ORIGINS=http://localhost:3000
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8100/api/tickers')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+
+  frontend:
+    build:
+      context: .
+      dockerfile: web/Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8100
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  # One-off service to fetch initial data
+  fetch:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - market_data:/data
+    env_file:
+      - .env
+    environment:
+      - MARKET_DATA_DIR=/data/parquet
+      - MARKET_DATA_LOG_DIR=/data/logs
+    command: ["uv", "run", "market-data", "fetch", "--full"]
+    profiles:
+      - init
+
+volumes:
+  market_data:
