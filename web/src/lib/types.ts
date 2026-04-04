@@ -136,7 +136,7 @@ export function getVixZone(value: number): VixZone {
 
 // --- Indicator Types ---
 
-export type IndicatorType = "sma" | "ema" | "rsi" | "macd" | "bollinger";
+export type IndicatorType = "sma" | "ema" | "rsi" | "macd" | "bollinger" | "vwap" | "atr" | "stochastic" | "obv" | "adx";
 
 export interface IndicatorPoint {
   date: string;
@@ -287,6 +287,14 @@ export const INDICATOR_COLORS: Record<string, string> = {
   BB_Upper: "#00d4ff",
   BB_Middle: "#3b89ff",
   BB_Lower: "#00d4ff",
+  VWAP: "#06b6d4",
+  ATR: "#f97316",
+  Stoch_K: "#8b5cf6",
+  Stoch_D: "#ec4899",
+  OBV: "#22c55e",
+  ADX: "#eab308",
+  Plus_DI: "#36bb80",
+  Minus_DI: "#ff4d8d",
 };
 
 export const VIX_ZONE_CONFIG: Record<VixZone, { label: string; color: string; bg: string; border: string }> = {

@@ -41,6 +41,11 @@ const INDICATOR_OPTIONS: { value: IndicatorType; label: string }[] = [
   { value: "rsi", label: "RSI" },
   { value: "macd", label: "MACD" },
   { value: "bollinger", label: "Bollinger Bands" },
+  { value: "vwap", label: "VWAP" },
+  { value: "atr", label: "ATR" },
+  { value: "stochastic", label: "Stochastic" },
+  { value: "obv", label: "OBV" },
+  { value: "adx", label: "ADX" },
 ];
 
 const CHART_THEMES = {
@@ -333,6 +338,176 @@ export default function IndicatorChart() {
           }));
           const fillPlugin = new BollingerFillPlugin(bandData);
           upperSeries.attachPrimitive(fillPlugin);
+        } else if (indicator === "vwap") {
+          const color = INDICATOR_COLORS["VWAP"] ?? "#06b6d4";
+          const series = chart.addSeries(LineSeries, { color, lineWidth: 2 });
+          indicatorSeriesRef.current.push(series);
+
+          const seen = new Set<number>();
+          const lineData: { time: UTCTimestamp; value: number }[] = [];
+          for (const p of points) {
+            const t = p.time as UTCTimestamp;
+            const v = p.values["VWAP"];
+            if (!seen.has(t) && v !== null && v !== undefined) {
+              seen.add(t);
+              lineData.push({ time: t, value: v });
+            }
+          }
+          lineData.sort((a, b) => (a.time as number) - (b.time as number));
+          series.setData(lineData);
+        } else if (indicator === "atr") {
+          const color = INDICATOR_COLORS["ATR"] ?? "#f97316";
+          const series = chart.addSeries(LineSeries, {
+            color,
+            lineWidth: 2,
+            priceScaleId: "atr",
+          });
+          chart.priceScale("atr").applyOptions({ scaleMargins: { top: 0.7, bottom: 0 } });
+          indicatorSeriesRef.current.push(series);
+
+          const key = `ATR_${period}`;
+          const seen = new Set<number>();
+          const lineData: { time: UTCTimestamp; value: number }[] = [];
+          for (const p of points) {
+            const t = p.time as UTCTimestamp;
+            const v = p.values[key];
+            if (!seen.has(t) && v !== null && v !== undefined) {
+              seen.add(t);
+              lineData.push({ time: t, value: v });
+            }
+          }
+          lineData.sort((a, b) => (a.time as number) - (b.time as number));
+          series.setData(lineData);
+        } else if (indicator === "stochastic") {
+          const kSeries = chart.addSeries(LineSeries, {
+            color: INDICATOR_COLORS["Stoch_K"] ?? "#8b5cf6",
+            lineWidth: 2,
+            priceScaleId: "stoch",
+          });
+          const dSeries = chart.addSeries(LineSeries, {
+            color: INDICATOR_COLORS["Stoch_D"] ?? "#ec4899",
+            lineWidth: 2,
+            priceScaleId: "stoch",
+          });
+          const obSeries = chart.addSeries(LineSeries, {
+            color: "rgba(255,77,141,0.4)",
+            lineWidth: 1,
+            lineStyle: 1,
+            priceScaleId: "stoch",
+          });
+          const osSeries = chart.addSeries(LineSeries, {
+            color: "rgba(54,187,128,0.4)",
+            lineWidth: 1,
+            lineStyle: 1,
+            priceScaleId: "stoch",
+          });
+          chart.priceScale("stoch").applyOptions({ scaleMargins: { top: 0.7, bottom: 0 } });
+          indicatorSeriesRef.current.push(kSeries, dSeries, obSeries, osSeries);
+
+          const seen = new Set<number>();
+          const kData: { time: UTCTimestamp; value: number }[] = [];
+          const dData: { time: UTCTimestamp; value: number }[] = [];
+          const obData: { time: UTCTimestamp; value: number }[] = [];
+          const osData: { time: UTCTimestamp; value: number }[] = [];
+          for (const p of points) {
+            const t = p.time as UTCTimestamp;
+            const k = p.values["Stoch_K"];
+            const d = p.values["Stoch_D"];
+            if (!seen.has(t) && k !== null && k !== undefined && d !== null && d !== undefined) {
+              seen.add(t);
+              kData.push({ time: t, value: k });
+              dData.push({ time: t, value: d });
+              obData.push({ time: t, value: 80 });
+              osData.push({ time: t, value: 20 });
+            }
+          }
+          kData.sort((a, b) => (a.time as number) - (b.time as number));
+          dData.sort((a, b) => (a.time as number) - (b.time as number));
+          obData.sort((a, b) => (a.time as number) - (b.time as number));
+          osData.sort((a, b) => (a.time as number) - (b.time as number));
+          kSeries.setData(kData);
+          dSeries.setData(dData);
+          obSeries.setData(obData);
+          osSeries.setData(osData);
+        } else if (indicator === "obv") {
+          const color = INDICATOR_COLORS["OBV"] ?? "#22c55e";
+          const series = chart.addSeries(LineSeries, {
+            color,
+            lineWidth: 2,
+            priceScaleId: "obv",
+          });
+          chart.priceScale("obv").applyOptions({ scaleMargins: { top: 0.7, bottom: 0 } });
+          indicatorSeriesRef.current.push(series);
+
+          const seen = new Set<number>();
+          const lineData: { time: UTCTimestamp; value: number }[] = [];
+          for (const p of points) {
+            const t = p.time as UTCTimestamp;
+            const v = p.values["OBV"];
+            if (!seen.has(t) && v !== null && v !== undefined) {
+              seen.add(t);
+              lineData.push({ time: t, value: v });
+            }
+          }
+          lineData.sort((a, b) => (a.time as number) - (b.time as number));
+          series.setData(lineData);
+        } else if (indicator === "adx") {
+          const adxKey = `ADX_${period}`;
+          const adxSeries = chart.addSeries(LineSeries, {
+            color: INDICATOR_COLORS["ADX"] ?? "#eab308",
+            lineWidth: 2,
+            priceScaleId: "adx",
+          });
+          const plusDiSeries = chart.addSeries(LineSeries, {
+            color: INDICATOR_COLORS["Plus_DI"] ?? "#36bb80",
+            lineWidth: 1,
+            priceScaleId: "adx",
+          });
+          const minusDiSeries = chart.addSeries(LineSeries, {
+            color: INDICATOR_COLORS["Minus_DI"] ?? "#ff4d8d",
+            lineWidth: 1,
+            priceScaleId: "adx",
+          });
+          const refSeries = chart.addSeries(LineSeries, {
+            color: "rgba(255,255,255,0.15)",
+            lineWidth: 1,
+            lineStyle: 1,
+            priceScaleId: "adx",
+          });
+          chart.priceScale("adx").applyOptions({ scaleMargins: { top: 0.6, bottom: 0 } });
+          indicatorSeriesRef.current.push(adxSeries, plusDiSeries, minusDiSeries, refSeries);
+
+          const seen = new Set<number>();
+          const adxData: { time: UTCTimestamp; value: number }[] = [];
+          const plusDiData: { time: UTCTimestamp; value: number }[] = [];
+          const minusDiData: { time: UTCTimestamp; value: number }[] = [];
+          const refData: { time: UTCTimestamp; value: number }[] = [];
+          for (const p of points) {
+            const t = p.time as UTCTimestamp;
+            const a = p.values[adxKey];
+            const pd = p.values["Plus_DI"];
+            const md = p.values["Minus_DI"];
+            if (
+              !seen.has(t) &&
+              a !== null && a !== undefined &&
+              pd !== null && pd !== undefined &&
+              md !== null && md !== undefined
+            ) {
+              seen.add(t);
+              adxData.push({ time: t, value: a });
+              plusDiData.push({ time: t, value: pd });
+              minusDiData.push({ time: t, value: md });
+              refData.push({ time: t, value: 25 });
+            }
+          }
+          adxData.sort((a, b) => (a.time as number) - (b.time as number));
+          plusDiData.sort((a, b) => (a.time as number) - (b.time as number));
+          minusDiData.sort((a, b) => (a.time as number) - (b.time as number));
+          refData.sort((a, b) => (a.time as number) - (b.time as number));
+          adxSeries.setData(adxData);
+          plusDiSeries.setData(plusDiData);
+          minusDiSeries.setData(minusDiData);
+          refSeries.setData(refData);
         }
 
         chart.timeScale().fitContent();
@@ -370,7 +545,7 @@ export default function IndicatorChart() {
             </Select>
           </FormControl>
 
-          {indicator !== "macd" && (
+          {!["macd", "vwap", "obv"].includes(indicator) && (
             <FormControl size="small" sx={{ minWidth: 90 }}>
               <InputLabel>Period</InputLabel>
               <Select value={period} label="Period" onChange={(e) => setPeriod(Number(e.target.value))}>
@@ -482,6 +657,114 @@ export default function IndicatorChart() {
                   RSI({period})
                 </Typography>
               </Box>
+            )}
+            {indicator === "vwap" && (
+              <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
+                <Box
+                  component="span"
+                  sx={{
+                    width: 20,
+                    height: 2,
+                    bgcolor: INDICATOR_COLORS["VWAP"],
+                    borderRadius: 1,
+                    display: "inline-block",
+                  }}
+                />
+                <Typography
+                  variant="caption"
+                  sx={{ fontFamily: "var(--font-geist-mono)", fontSize: "0.7rem", color: "text.secondary" }}
+                >
+                  VWAP
+                </Typography>
+              </Box>
+            )}
+            {indicator === "atr" && (
+              <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
+                <Box
+                  component="span"
+                  sx={{
+                    width: 20,
+                    height: 2,
+                    bgcolor: INDICATOR_COLORS["ATR"],
+                    borderRadius: 1,
+                    display: "inline-block",
+                  }}
+                />
+                <Typography
+                  variant="caption"
+                  sx={{ fontFamily: "var(--font-geist-mono)", fontSize: "0.7rem", color: "text.secondary" }}
+                >
+                  ATR({period})
+                </Typography>
+              </Box>
+            )}
+            {indicator === "stochastic" && (
+              <>
+                {(["Stoch_K", "Stoch_D"] as const).map((k) => (
+                  <Box key={k} sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
+                    <Box
+                      component="span"
+                      sx={{
+                        width: 20,
+                        height: 2,
+                        bgcolor: INDICATOR_COLORS[k],
+                        borderRadius: 1,
+                        display: "inline-block",
+                      }}
+                    />
+                    <Typography
+                      variant="caption"
+                      sx={{ fontFamily: "var(--font-geist-mono)", fontSize: "0.7rem", color: "text.secondary" }}
+                    >
+                      {k === "Stoch_K" ? "%K" : "%D"}
+                    </Typography>
+                  </Box>
+                ))}
+              </>
+            )}
+            {indicator === "obv" && (
+              <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
+                <Box
+                  component="span"
+                  sx={{
+                    width: 20,
+                    height: 2,
+                    bgcolor: INDICATOR_COLORS["OBV"],
+                    borderRadius: 1,
+                    display: "inline-block",
+                  }}
+                />
+                <Typography
+                  variant="caption"
+                  sx={{ fontFamily: "var(--font-geist-mono)", fontSize: "0.7rem", color: "text.secondary" }}
+                >
+                  OBV
+                </Typography>
+              </Box>
+            )}
+            {indicator === "adx" && (
+              <>
+                {(["ADX", "Plus_DI", "Minus_DI"] as const).map((k) => (
+                  <Box key={k} sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
+                    <Box
+                      component="span"
+                      sx={{
+                        width: 20,
+                        height: 2,
+                        bgcolor: INDICATOR_COLORS[k],
+                        borderRadius: 1,
+                        display: "inline-block",
+                      }}
+                    />
+                    <Typography
+                      variant="caption"
+                      sx={{ fontFamily: "var(--font-geist-mono)", fontSize: "0.7rem", color: "text.secondary" }}
+                    >
+                      {k === "ADX" ? `ADX(${period})` : k === "Plus_DI" ? "+DI" : "-DI"}
+                    </Typography>
+                  </Box>
+                ))}
+              </>
             )}
           </Box>
         </Box>

@@ -558,6 +558,11 @@ _INDICATOR_COLUMNS: dict[str, list[str]] = {
     "rsi": [],
     "macd": ["MACD", "Signal", "Histogram"],
     "bollinger": ["BB_Upper", "BB_Middle", "BB_Lower"],
+    "vwap": [],
+    "atr": [],
+    "stochastic": ["Stoch_K", "Stoch_D"],
+    "obv": [],
+    "adx": ["Plus_DI", "Minus_DI"],
 }
 
 _VALID_INDICATORS = set(_INDICATOR_COLUMNS)
@@ -584,7 +589,7 @@ def _indicator_records(result_df: pd.DataFrame) -> list[IndicatorPoint]:
 @v1.get("/indicators/{ticker}", response_model=list[IndicatorPoint])
 async def get_indicators(
     ticker: str,
-    indicator: str = Query(description="One of: sma, ema, rsi, macd, bollinger"),
+    indicator: str = Query(description="One of: sma, ema, rsi, macd, bollinger, vwap, atr, stochastic, obv, adx"),
     period: int = Query(default=20, ge=1, le=500),
     fast: int = Query(default=12, ge=1, le=500),
     slow: int = Query(default=26, ge=1, le=500),
@@ -614,8 +619,18 @@ async def get_indicators(
         result_df = await asyncio.to_thread(indicators_mod.rsi, df, column, period)
     elif indicator == "macd":
         result_df = await asyncio.to_thread(indicators_mod.macd, df, column, fast, slow, signal)
-    else:
+    elif indicator == "bollinger":
         result_df = await asyncio.to_thread(indicators_mod.bollinger_bands, df, column, period, std_dev)
+    elif indicator == "vwap":
+        result_df = await asyncio.to_thread(indicators_mod.vwap, df, column, period)
+    elif indicator == "atr":
+        result_df = await asyncio.to_thread(indicators_mod.atr, df, column, period)
+    elif indicator == "stochastic":
+        result_df = await asyncio.to_thread(indicators_mod.stochastic, df, column, period)
+    elif indicator == "obv":
+        result_df = await asyncio.to_thread(indicators_mod.obv, df, column, period)
+    else:
+        result_df = await asyncio.to_thread(indicators_mod.adx, df, column, period)
     return _indicator_records(result_df)
 
 

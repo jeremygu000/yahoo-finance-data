@@ -149,3 +149,165 @@ def bollinger_bands(
         {"BB_Upper": upper, "BB_Middle": middle, "BB_Lower": lower},
         index=df.index,
     )
+
+
+def vwap(df: pd.DataFrame, column: str = "Close", period: int = 20) -> pd.DataFrame:
+    """Volume Weighted Average Price.
+
+    Uses typical price ``(High + Low + Close) / 3`` weighted by volume.
+    The *period* parameter is accepted for API compatibility but ignored;
+    VWAP is a cumulative indicator.
+
+    Args:
+        df: OHLCV DataFrame with DatetimeIndex.
+        column: Unused (kept for API compatibility).
+        period: Unused (kept for API compatibility).
+
+    Returns:
+        DataFrame with a single column ``VWAP``.
+    """
+    col_name = "VWAP"
+    if df.empty:
+        return pd.DataFrame(index=df.index, columns=[col_name], dtype=float)
+
+    typical_price = (df["High"] + df["Low"] + df["Close"]) / 3.0
+    cum_tp_vol = (typical_price * df["Volume"]).cumsum()
+    cum_vol = df["Volume"].cumsum()
+    vwap_values = cum_tp_vol / cum_vol.replace(0.0, np.nan)
+    return pd.DataFrame({col_name: vwap_values}, index=df.index)
+
+
+def atr(df: pd.DataFrame, column: str = "Close", period: int = 14) -> pd.DataFrame:
+    """Average True Range (Wilder smoothing).
+
+    Args:
+        df: OHLCV DataFrame with DatetimeIndex.
+        column: Unused (kept for API compatibility).
+        period: Smoothing window (default: 14).
+
+    Returns:
+        DataFrame with a single column ``ATR_{period}``.
+        First ``period`` rows are NaN.
+    """
+    col_name = f"ATR_{period}"
+    if df.empty:
+        return pd.DataFrame(index=df.index, columns=[col_name], dtype=float)
+
+    high_low = df["High"] - df["Low"]
+    high_close = (df["High"] - df["Close"].shift()).abs()
+    low_close = (df["Low"] - df["Close"].shift()).abs()
+    tr = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
+    atr_values = tr.ewm(alpha=1.0 / period, adjust=False, min_periods=period).mean()
+    return pd.DataFrame({col_name: atr_values}, index=df.index)
+
+
+def stochastic(
+    df: pd.DataFrame,
+    column: str = "Close",
+    period: int = 14,
+    smooth_k: int = 3,
+) -> pd.DataFrame:
+    """Stochastic Oscillator (%K and %D).
+
+    Args:
+        df: OHLCV DataFrame with DatetimeIndex.
+        column: Unused (uses High/Low/Close).
+        period: Lookback window for %K (default: 14).
+        smooth_k: SMA smoothing for %D (default: 3).
+
+    Returns:
+        DataFrame with columns ``Stoch_K`` and ``Stoch_D`` on 0-100 scale.
+    """
+    if df.empty:
+        return pd.DataFrame(index=df.index, columns=["Stoch_K", "Stoch_D"], dtype=float)
+
+    lowest_low = df["Low"].rolling(window=period, min_periods=period).min()
+    highest_high = df["High"].rolling(window=period, min_periods=period).max()
+
+    denom = highest_high - lowest_low
+    k = ((df["Close"] - lowest_low) / denom.replace(0.0, np.nan)) * 100.0
+    d = k.rolling(window=smooth_k, min_periods=smooth_k).mean()
+
+    return pd.DataFrame({"Stoch_K": k, "Stoch_D": d}, index=df.index)
+
+
+def obv(df: pd.DataFrame, column: str = "Close", period: int = 20) -> pd.DataFrame:
+    """On Balance Volume.
+
+    Cumulative volume: added when price rises, subtracted when it falls.
+    The *period* parameter is accepted for API compatibility but ignored.
+
+    Args:
+        df: OHLCV DataFrame with DatetimeIndex.
+        column: Price column for direction (default: "Close").
+        period: Unused (kept for API compatibility).
+
+    Returns:
+        DataFrame with a single column ``OBV``.
+    """
+    col_name = "OBV"
+    if df.empty:
+        return pd.DataFrame(index=df.index, columns=[col_name], dtype=float)
+
+    direction = np.sign(df[column].diff())
+    obv_values = (direction * df["Volume"]).fillna(0.0).cumsum()
+    return pd.DataFrame({col_name: obv_values}, index=df.index)
+
+
+def adx(df: pd.DataFrame, column: str = "Close", period: int = 14) -> pd.DataFrame:
+    """Average Directional Index (Wilder smoothing).
+
+    Args:
+        df: OHLCV DataFrame with DatetimeIndex.
+        column: Unused (uses High/Low/Close).
+        period: Smoothing window (default: 14).
+
+    Returns:
+        DataFrame with columns ``ADX_{period}``, ``Plus_DI``, ``Minus_DI``.
+        First ``2 * period`` rows are NaN for ADX.
+    """
+    col_name = f"ADX_{period}"
+    if df.empty:
+        return pd.DataFrame(index=df.index, columns=[col_name, "Plus_DI", "Minus_DI"], dtype=float)
+
+    high = df["High"]
+    low = df["Low"]
+    close = df["Close"]
+
+    # Directional movement
+    up_move = high.diff()
+    down_move = -low.diff()
+
+    plus_dm = pd.Series(
+        np.where((up_move > down_move) & (up_move > 0), up_move, 0.0),
+        index=df.index,
+    )
+    minus_dm = pd.Series(
+        np.where((down_move > up_move) & (down_move > 0), down_move, 0.0),
+        index=df.index,
+    )
+
+    # True Range
+    high_low = high - low
+    high_close = (high - close.shift()).abs()
+    low_close = (low - close.shift()).abs()
+    tr = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
+
+    alpha = 1.0 / period
+
+    # Wilder smoothing
+    atr_smooth = tr.ewm(alpha=alpha, adjust=False, min_periods=period).mean()
+    plus_dm_smooth = plus_dm.ewm(alpha=alpha, adjust=False, min_periods=period).mean()
+    minus_dm_smooth = minus_dm.ewm(alpha=alpha, adjust=False, min_periods=period).mean()
+
+    plus_di = (plus_dm_smooth / atr_smooth.replace(0.0, np.nan)) * 100.0
+    minus_di = (minus_dm_smooth / atr_smooth.replace(0.0, np.nan)) * 100.0
+
+    di_sum = plus_di + minus_di
+    dx = ((plus_di - minus_di).abs() / di_sum.replace(0.0, np.nan)) * 100.0
+    adx_values = dx.ewm(alpha=alpha, adjust=False, min_periods=period).mean()
+
+    return pd.DataFrame(
+        {col_name: adx_values, "Plus_DI": plus_di, "Minus_DI": minus_di},
+        index=df.index,
+    )
