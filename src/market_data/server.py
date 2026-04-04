@@ -58,6 +58,7 @@ from market_data.schemas import (
     SearchResult,
     SummaryRequest,
     SummaryResponse,
+    TickerOverviewResponse,
     TickerStatus,
     WatchlistAddRequest,
     WatchlistResponse,
@@ -147,12 +148,6 @@ async def logging_and_error_middleware(request: Request, call_next: Any) -> Resp
     start = time.monotonic()
 
     client_ip = request.client.host if request.client else "unknown"
-    if _is_rate_limited(client_ip):
-        return JSONResponse(
-            status_code=429,
-            content={"error": "Rate limit exceeded"},
-            headers={"Retry-After": str(RATE_LIMIT_WINDOW), "X-Request-ID": request_id},
-        )
 
     # Check API key auth if configured
     if API_KEY is not None:
@@ -318,7 +313,7 @@ def _ohlcv_records(df: pd.DataFrame) -> list[OHLCVBar]:
 
     ts_index = pd.DatetimeIndex(df.index)
     dates = [d.isoformat() for d in ts_index.date]
-    unix_ts = (ts_index.astype("int64") // 10**9).tolist()
+    unix_ts = [int(ts.timestamp()) for ts in ts_index]
     opens = df["Open"].round(4).tolist()
     highs = df["High"].round(4).tolist()
     lows = df["Low"].round(4).tolist()
@@ -345,7 +340,7 @@ def _close_records(df: pd.DataFrame) -> list[ClosePoint]:
 
     ts_index = pd.DatetimeIndex(df.index)
     dates = ts_index.date
-    unix_ts = (ts_index.astype("int64") // 10**9).tolist()
+    unix_ts = [int(ts.timestamp()) for ts in ts_index]
     closes = df["Close"].round(4).tolist()
 
     return [
@@ -361,6 +356,20 @@ def _close_records(df: pd.DataFrame) -> list[ClosePoint]:
 @v1.get("/tickers", response_model=list[TickerStatus])
 async def get_tickers() -> list[dict[str, object]]:
     return await asyncio.to_thread(store.status)
+
+
+@v1.get("/tickers/names", response_model=list[str])
+async def get_ticker_names() -> list[str]:
+    return await asyncio.to_thread(store.list_tickers)
+
+
+@v1.get("/tickers/overview", response_model=TickerOverviewResponse)
+async def get_tickers_overview(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=24, ge=1, le=100),
+    search: str = Query(default=""),
+) -> dict[str, object]:
+    return await asyncio.to_thread(store.status_paginated, page, page_size, search)
 
 
 @v1.get("/ohlcv/{ticker}", response_model=list[OHLCVBar])

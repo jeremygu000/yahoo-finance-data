@@ -1,5 +1,6 @@
 import type {
   TickerInfo,
+  TickerOverviewResponse,
   OHLCVBar,
   LatestQuote,
   CompareData,
@@ -32,6 +33,23 @@ async function fetcher<T>(path: string): Promise<T> {
 
 export async function fetchTickers(): Promise<TickerInfo[]> {
   return fetcher<TickerInfo[]>("/api/tickers");
+}
+
+export async function fetchTickerNames(): Promise<string[]> {
+  return fetcher<string[]>("/api/v1/tickers/names");
+}
+
+export async function fetchTickerOverview(
+  page = 1,
+  pageSize = 24,
+  search = "",
+): Promise<TickerOverviewResponse> {
+  const params = new URLSearchParams({
+    page: String(page),
+    page_size: String(pageSize),
+  });
+  if (search) params.set("search", search);
+  return fetcher<TickerOverviewResponse>(`/api/v1/tickers/overview?${params.toString()}`);
 }
 
 export async function fetchOHLCV(ticker: string, days = 365): Promise<OHLCVBar[]> {

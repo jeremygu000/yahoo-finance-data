@@ -28,8 +28,15 @@ import { useThemeMode } from "./ThemeProvider";
 import ExportButton from "./ExportButton";
 import useTickers from "@/lib/useTickers";
 
-const DAYS_OPTIONS = [30, 90, 180, 365] as const;
-type Days = (typeof DAYS_OPTIONS)[number];
+type KLineInterval = "daily" | "weekly" | "monthly";
+
+const INTERVAL_OPTIONS: { value: KLineInterval; label: string }[] = [
+  { value: "daily", label: "日K" },
+  { value: "weekly", label: "周K" },
+  { value: "monthly", label: "月K" },
+];
+
+const FULL_HISTORY_DAYS = 3650;
 
 const CHART_THEMES = {
   light: {
@@ -50,6 +57,52 @@ const CHART_THEMES = {
   },
 } as const;
 
+function getMondayDateString(d: Date): string {
+  const day = d.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  const monday = new Date(d);
+  monday.setDate(d.getDate() + diff);
+  const y = monday.getFullYear();
+  const m = String(monday.getMonth() + 1).padStart(2, "0");
+  const dd = String(monday.getDate()).padStart(2, "0");
+  return `${y}-${m}-${dd}`;
+}
+
+function aggregateWeekly(bars: OHLCVBar[]): OHLCVBar[] {
+  const weekMap = new Map<string, OHLCVBar>();
+  for (const bar of bars) {
+    const d = new Date(bar.date);
+    const weekKey = getMondayDateString(d);
+    const existing = weekMap.get(weekKey);
+    if (!existing) {
+      weekMap.set(weekKey, { ...bar, date: weekKey });
+    } else {
+      existing.high = Math.max(existing.high, bar.high);
+      existing.low = Math.min(existing.low, bar.low);
+      existing.close = bar.close;
+      existing.volume += bar.volume;
+    }
+  }
+  return Array.from(weekMap.values()).toSorted((a, b) => a.time - b.time);
+}
+
+function aggregateMonthly(bars: OHLCVBar[]): OHLCVBar[] {
+  const monthMap = new Map<string, OHLCVBar>();
+  for (const bar of bars) {
+    const monthKey = bar.date.substring(0, 7);
+    const existing = monthMap.get(monthKey);
+    if (!existing) {
+      monthMap.set(monthKey, { ...bar });
+    } else {
+      existing.high = Math.max(existing.high, bar.high);
+      existing.low = Math.min(existing.low, bar.low);
+      existing.close = bar.close;
+      existing.volume += bar.volume;
+    }
+  }
+  return Array.from(monthMap.values()).toSorted((a, b) => a.time - b.time);
+}
+
 export default function CandlestickChart() {
   const containerRef = useRef<HTMLDivElement>(null);
   const volumeContainerRef = useRef<HTMLDivElement>(null);
@@ -60,10 +113,10 @@ export default function CandlestickChart() {
 
   const { tickers } = useTickers();
   const [ticker, setTicker] = useState<string>("");
-  const [days, setDays] = useState<Days>(365);
+  const [interval, setInterval] = useState<KLineInterval>("daily");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [data, setData] = useState<OHLCVBar[]>([]);
+  const [rawBars, setRawBars] = useState<OHLCVBar[]>([]);
 
   const { mode } = useThemeMode();
 
@@ -83,7 +136,7 @@ export default function CandlestickChart() {
       grid: theme.grid,
       crosshair: theme.crosshair,
       rightPriceScale: { borderColor: theme.borderColor },
-      timeScale: { borderColor: theme.borderColor, timeVisible: true },
+      timeScale: { borderColor: theme.borderColor, timeVisible: false },
     });
     chartRef.current = chart;
 
@@ -156,31 +209,8 @@ export default function CandlestickChart() {
       setLoading(true);
       setError(null);
       try {
-        const bars = await fetchOHLCV(ticker, days);
-        setData(bars);
-        if (candleRef.current && volumeRef.current) {
-          const seen = new Set<number>();
-          const candles: { time: UTCTimestamp; open: number; high: number; low: number; close: number }[] = [];
-          const volumes: { time: UTCTimestamp; value: number; color: string }[] = [];
-          for (const b of bars) {
-            const t = b.time as UTCTimestamp;
-            if (!seen.has(t)) {
-              seen.add(t);
-              candles.push({ time: t, open: b.open, high: b.high, low: b.low, close: b.close });
-              volumes.push({
-                time: t,
-                value: b.volume,
-                color: b.close >= b.open ? "rgba(54,187,128,0.4)" : "rgba(255,113,52,0.4)",
-              });
-            }
-          }
-          candles.sort((a, b) => (a.time as number) - (b.time as number));
-          volumes.sort((a, b) => (a.time as number) - (b.time as number));
-          candleRef.current.setData(candles);
-          volumeRef.current.setData(volumes);
-          chartRef.current?.timeScale().fitContent();
-          volumeChartRef.current?.timeScale().fitContent();
-        }
+        const bars = await fetchOHLCV(ticker, FULL_HISTORY_DAYS);
+        setRawBars(bars);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Failed to load");
       } finally {
@@ -188,9 +218,52 @@ export default function CandlestickChart() {
       }
     }
     load();
-  }, [ticker, days]);
+  }, [ticker]);
 
-  const latest = data[data.length - 1];
+  useEffect(() => {
+    if (!candleRef.current || !volumeRef.current || rawBars.length === 0) return;
+
+    const displayBars: OHLCVBar[] =
+      interval === "weekly"
+        ? aggregateWeekly(rawBars)
+        : interval === "monthly"
+          ? aggregateMonthly(rawBars)
+          : rawBars;
+
+    const seen = new Set<number>();
+    const candles: { time: UTCTimestamp; open: number; high: number; low: number; close: number }[] = [];
+    const volumes: { time: UTCTimestamp; value: number; color: string }[] = [];
+
+    for (const b of displayBars) {
+      const t = b.time as UTCTimestamp;
+      if (!seen.has(t)) {
+        seen.add(t);
+        candles.push({ time: t, open: b.open, high: b.high, low: b.low, close: b.close });
+        volumes.push({
+          time: t,
+          value: b.volume,
+          color: b.close >= b.open ? "rgba(54,187,128,0.4)" : "rgba(255,113,52,0.4)",
+        });
+      }
+    }
+
+    candles.sort((a, b) => (a.time as number) - (b.time as number));
+    volumes.sort((a, b) => (a.time as number) - (b.time as number));
+
+    candleRef.current.setData(candles);
+    volumeRef.current.setData(volumes);
+    chartRef.current?.timeScale().fitContent();
+    volumeChartRef.current?.timeScale().fitContent();
+  }, [rawBars, interval]);
+
+  const displayBarsForLatest: OHLCVBar[] =
+    interval === "weekly"
+      ? aggregateWeekly(rawBars)
+      : interval === "monthly"
+        ? aggregateMonthly(rawBars)
+        : rawBars;
+
+  const latest = displayBarsForLatest[displayBarsForLatest.length - 1];
 
   return (
     <Card>
@@ -208,21 +281,21 @@ export default function CandlestickChart() {
           </FormControl>
 
           <ToggleButtonGroup
-            value={days}
+            value={interval}
             exclusive
             onChange={(_, v) => {
-              if (v !== null) setDays(v as Days);
+              if (v !== null) setInterval(v as KLineInterval);
             }}
             size="small"
           >
-            {DAYS_OPTIONS.map((d) => (
-              <ToggleButton key={d} value={d}>
-                {d}d
+            {INTERVAL_OPTIONS.map((opt) => (
+              <ToggleButton key={opt.value} value={opt.value}>
+                {opt.label}
               </ToggleButton>
             ))}
           </ToggleButtonGroup>
 
-          <ExportButton ticker={ticker} days={days} />
+          <ExportButton ticker={ticker} days={FULL_HISTORY_DAYS} />
 
           {latest && (
             <Box sx={{ ml: "auto", display: "flex", gap: 3 }}>

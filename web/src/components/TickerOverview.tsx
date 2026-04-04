@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import Box from "@mui/material/Box";
 import { useThemeMode } from "./ThemeProvider";
 import { useLivePrices } from "./PriceProvider";
@@ -11,17 +11,17 @@ import Chip from "@mui/material/Chip";
 import Grid from "@mui/material/Grid";
 import Skeleton from "@mui/material/Skeleton";
 import Alert from "@mui/material/Alert";
+import TextField from "@mui/material/TextField";
+import InputAdornment from "@mui/material/InputAdornment";
+import Pagination from "@mui/material/Pagination";
 import TrendingUpIcon from "@mui/icons-material/TrendingUp";
 import TrendingDownIcon from "@mui/icons-material/TrendingDown";
 import ShowChartIcon from "@mui/icons-material/ShowChart";
-import { fetchTickers, fetchLatest } from "@/lib/api";
-import type { TickerInfo, LatestQuote } from "@/lib/types";
+import SearchIcon from "@mui/icons-material/Search";
+import { fetchTickerOverview } from "@/lib/api";
+import type { TickerOverviewItem, TickerOverviewResponse } from "@/lib/types";
 
-interface TickerCard extends TickerInfo {
-  latest: LatestQuote | null;
-  change: number | null;
-  changePct: number | null;
-}
+const PAGE_SIZE = 24;
 
 function formatPrice(n: number): string {
   return n.toLocaleString("en-US", {
@@ -60,85 +60,193 @@ function usePrevious<T>(value: T): T | undefined {
 }
 
 export default function TickerOverview() {
-  const [cards, setCards] = useState<TickerCard[]>([]);
+  const [page, setPage] = useState(1);
+  const [searchInput, setSearchInput] = useState("");
+  const [search, setSearch] = useState("");
+  const [data, setData] = useState<TickerOverviewResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [softLoading, setSoftLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { mode } = useThemeMode();
   const { prices: livePrices } = useLivePrices();
 
-  useEffect(() => {
-    async function load() {
-      try {
-        const infos = await fetchTickers();
-        const enriched = await Promise.all(
-          infos.map(async (info) => {
-            const latest = await fetchLatest(info.ticker);
-            let change: number | null = null;
-            let changePct: number | null = null;
-            if (latest) {
-              change = latest.close - latest.open;
-              changePct = ((latest.close - latest.open) / latest.open) * 100;
-            }
-            return Object.assign({}, info, { latest, change, changePct });
-          }),
-        );
-        setCards(enriched);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "Failed to load");
-      } finally {
-        setLoading(false);
-      }
-    }
-    load();
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hasLoadedRef = useRef(false);
+
+  const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setSearchInput(value);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      setSearch(value);
+      setPage(1);
+    }, 300);
   }, []);
 
-  if (loading) {
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function load() {
+      if (!hasLoadedRef.current) {
+        setLoading(true);
+      } else {
+        setSoftLoading(true);
+      }
+      setError(null);
+
+      try {
+        const result = await fetchTickerOverview(page, PAGE_SIZE, search);
+        if (!cancelled) {
+          setData(result);
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setError(e instanceof Error ? e.message : "Failed to load");
+        }
+      } finally {
+        if (!cancelled) {
+          hasLoadedRef.current = true;
+          setLoading(false);
+          setSoftLoading(false);
+        }
+      }
+    }
+
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [page, search]);
+
+  if (loading && !hasLoadedRef.current) {
     return (
-      <Grid container spacing={2}>
-        {Array.from({ length: 6 }, (_, i) => (
-          <Grid key={`skel-${String(i)}`} size={{ xs: 12, sm: 6, lg: 4 }}>
-            <Skeleton variant="rounded" height={160} sx={{ borderRadius: "12px" }} />
-          </Grid>
-        ))}
-      </Grid>
+      <Box>
+        <Box sx={{ mb: 2.5 }}>
+          <Skeleton variant="rounded" height={56} sx={{ borderRadius: "8px", maxWidth: 400 }} />
+        </Box>
+        <Grid container spacing={2}>
+          {Array.from({ length: 6 }, (_, i) => (
+            <Grid key={`skel-${String(i)}`} size={{ xs: 12, sm: 6, lg: 4 }}>
+              <Skeleton variant="rounded" height={160} sx={{ borderRadius: "12px" }} />
+            </Grid>
+          ))}
+        </Grid>
+      </Box>
     );
   }
 
-  if (error) {
+  if (error && !hasLoadedRef.current) {
     return <Alert severity="error">{error}</Alert>;
   }
+
+  const items = data?.items ?? [];
+  const total = data?.total ?? 0;
+  const totalPages = data?.total_pages ?? 1;
+  const startIdx = (page - 1) * PAGE_SIZE + 1;
+  const endIdx = Math.min(page * PAGE_SIZE, total);
 
   return (
     <>
       <style>{flashKeyframes}</style>
-      <Grid container spacing={2}>
-        {cards.map((card, idx) => {
-          const liveData = livePrices[card.ticker];
-          const displayClose = liveData ? liveData.close : (card.latest?.close ?? null);
-          const isLive = liveData !== undefined;
 
-          const isUp = card.change !== null && card.change >= 0;
-          const iconColor = ICON_COLORS[idx % ICON_COLORS.length];
+      <Box sx={{ mb: 2.5 }}>
+        <TextField
+          value={searchInput}
+          onChange={handleSearchChange}
+          placeholder="Search tickers..."
+          size="small"
+          sx={{ width: { xs: "100%", sm: 400 } }}
+          slotProps={{
+            input: {
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon sx={{ fontSize: "1.1rem", color: "text.disabled" }} />
+                </InputAdornment>
+              ),
+            },
+          }}
+        />
+      </Box>
 
-          return (
-            <TickerCard
-              key={card.ticker}
-              card={card}
-              displayClose={displayClose}
-              isLive={isLive}
-              isUp={isUp}
-              iconColor={iconColor}
-              mode={mode}
-            />
-          );
-        })}
-      </Grid>
+      <Box sx={{ opacity: softLoading ? 0.6 : 1, transition: "opacity 0.2s" }}>
+        <Grid container spacing={2}>
+          {items.map((item, idx) => {
+            const liveData = livePrices[item.ticker];
+            const displayClose = liveData ? liveData.close : (item.latest?.close ?? null);
+            const isLive = liveData !== undefined;
+            const isUp = item.change !== null && item.change >= 0;
+            const iconColor = ICON_COLORS[idx % ICON_COLORS.length];
+
+            return (
+              <TickerCard
+                key={item.ticker}
+                item={item}
+                displayClose={displayClose}
+                isLive={isLive}
+                isUp={isUp}
+                iconColor={iconColor}
+                mode={mode}
+              />
+            );
+          })}
+        </Grid>
+      </Box>
+
+      {total > 0 && (
+        <Box
+          sx={{
+            mt: 3,
+            display: "flex",
+            flexDirection: { xs: "column", sm: "row" },
+            alignItems: { xs: "flex-start", sm: "center" },
+            justifyContent: "space-between",
+            gap: 2,
+          }}
+        >
+          <Typography
+            sx={{
+              fontFamily: "var(--font-geist-mono)",
+              fontSize: "0.75rem",
+              color: "text.secondary",
+            }}
+          >
+            Showing {startIdx}–{endIdx} of {total} tickers
+          </Typography>
+          <Pagination
+            count={totalPages}
+            page={page}
+            onChange={(_e, val) => setPage(val)}
+            color="primary"
+            size="small"
+            siblingCount={1}
+            boundaryCount={1}
+            sx={{
+              "& .MuiPaginationItem-root": {
+                fontFamily: "var(--font-geist-mono)",
+                fontSize: "0.75rem",
+              },
+            }}
+          />
+        </Box>
+      )}
+
+      {error && (
+        <Alert severity="error" sx={{ mt: 2 }}>
+          {error}
+        </Alert>
+      )}
     </>
   );
 }
 
 interface TickerCardProps {
-  card: TickerCard;
+  item: TickerOverviewItem;
   displayClose: number | null;
   isLive: boolean;
   isUp: boolean;
@@ -146,7 +254,7 @@ interface TickerCardProps {
   mode: "light" | "dark";
 }
 
-function TickerCard({ card, displayClose, isLive, isUp, iconColor, mode }: TickerCardProps) {
+function TickerCard({ item, displayClose, isLive, isUp, iconColor, mode }: TickerCardProps) {
   const prevClose = usePrevious(displayClose);
   const [flashDir, setFlashDir] = useState<"up" | "down" | null>(null);
 
@@ -202,7 +310,7 @@ function TickerCard({ card, displayClose, isLive, isUp, iconColor, mode }: Ticke
                     textTransform: "uppercase",
                   }}
                 >
-                  {card.ticker}
+                  {item.ticker}
                 </Typography>
                 {isLive && (
                   <Box
@@ -246,7 +354,7 @@ function TickerCard({ card, displayClose, isLive, isUp, iconColor, mode }: Ticke
               </Box>
             </Box>
 
-            {card.change !== null && (
+            {item.change !== null && (
               <Chip
                 icon={
                   isUp ? (
@@ -255,7 +363,7 @@ function TickerCard({ card, displayClose, isLive, isUp, iconColor, mode }: Ticke
                     <TrendingDownIcon sx={{ fontSize: "0.85rem !important" }} />
                   )
                 }
-                label={`${isUp ? "+" : ""}${(card.changePct ?? 0).toFixed(2)}%`}
+                label={`${isUp ? "+" : ""}${(item.change_pct ?? 0).toFixed(2)}%`}
                 size="small"
                 sx={{
                   fontFamily: "var(--font-geist-mono)",
@@ -296,7 +404,7 @@ function TickerCard({ card, displayClose, isLive, isUp, iconColor, mode }: Ticke
                 —
               </Typography>
             )}
-            {card.change !== null && (
+            {item.change !== null && (
               <Typography
                 sx={{
                   fontFamily: "var(--font-geist-mono)",
@@ -305,8 +413,8 @@ function TickerCard({ card, displayClose, isLive, isUp, iconColor, mode }: Ticke
                   mt: 0.25,
                 }}
               >
-                {card.change >= 0 ? "+" : ""}
-                {formatPrice(card.change)}
+                {item.change >= 0 ? "+" : ""}
+                {formatPrice(item.change)}
               </Typography>
             )}
           </Box>
@@ -322,8 +430,8 @@ function TickerCard({ card, displayClose, isLive, isUp, iconColor, mode }: Ticke
             }}
           >
             {[
-              { label: "Rows", value: card.rows.toLocaleString() },
-              { label: "Size", value: `${card.size_kb} KB` },
+              { label: "Rows", value: item.rows.toLocaleString() },
+              { label: "Size", value: `${item.size_kb} KB` },
             ].map((stat) => (
               <Box key={stat.label}>
                 <Typography
@@ -357,10 +465,10 @@ function TickerCard({ card, displayClose, isLive, isUp, iconColor, mode }: Ticke
                 Range
               </Typography>
               <Typography sx={{ fontFamily: "var(--font-geist-mono)", fontSize: "0.75rem", color: "text.secondary" }}>
-                {card.first_date} → {card.last_date}
+                {item.first_date} → {item.last_date}
               </Typography>
             </Box>
-            {card.latest && (
+            {item.latest && (
               <Box>
                 <Typography
                   variant="caption"
@@ -375,7 +483,7 @@ function TickerCard({ card, displayClose, isLive, isUp, iconColor, mode }: Ticke
                   Volume
                 </Typography>
                 <Typography sx={{ fontFamily: "var(--font-geist-mono)", fontSize: "0.75rem", color: "text.secondary" }}>
-                  {formatVolume(card.latest.volume)}
+                  {formatVolume(item.latest.volume)}
                 </Typography>
               </Box>
             )}

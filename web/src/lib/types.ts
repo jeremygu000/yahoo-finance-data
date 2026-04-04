@@ -6,6 +6,26 @@ export interface TickerInfo {
   size_kb: number;
 }
 
+export interface TickerOverviewItem {
+  ticker: string;
+  interval: string;
+  rows: number;
+  first_date: string;
+  last_date: string;
+  size_kb: number;
+  latest: LatestQuote | null;
+  change: number | null;
+  change_pct: number | null;
+}
+
+export interface TickerOverviewResponse {
+  items: TickerOverviewItem[];
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+}
+
 export interface OHLCVBar {
   date: string;
   time: number; // Unix timestamp (seconds)

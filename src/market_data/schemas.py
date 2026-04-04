@@ -187,6 +187,26 @@ class SummaryResponse(BaseModel):
     days: int
 
 
+class TickerOverviewItem(BaseModel):
+    ticker: str
+    interval: str = "1d"
+    rows: int
+    first_date: str
+    last_date: str
+    size_kb: float
+    latest: LatestQuote | None = None
+    change: float | None = None
+    change_pct: float | None = None
+
+
+class TickerOverviewResponse(BaseModel):
+    items: list[TickerOverviewItem]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
+
+
 class ChatRequest(BaseModel):
     message: str
     session_id: str | None = None
