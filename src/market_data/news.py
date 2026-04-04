@@ -16,26 +16,17 @@ logger = logging.getLogger(__name__)
 _NEWS_TTL = max(CACHE_TTL_SECONDS, 600)  # 10 min minimum for news
 _cache = InMemoryCache(ttl_seconds=_NEWS_TTL, max_entries=256)
 
-_ARTICLE_KEYS: list[str] = [
-    "uuid",
-    "title",
-    "link",
-    "publisher",
-    "providerPublishTime",
-    "type",
-    "relatedTickers",
-]
 
-
-def _extract_thumbnail(raw: dict[str, Any]) -> str | None:
-    """Extract the best thumbnail URL from a news item."""
-    thumb = raw.get("thumbnail")
+def _extract_thumbnail(content: dict[str, Any]) -> str | None:
+    thumb = content.get("thumbnail")
     if not isinstance(thumb, dict):
         return None
+    original_url = thumb.get("originalUrl")
+    if isinstance(original_url, str):
+        return original_url
     resolutions = thumb.get("resolutions")
     if not isinstance(resolutions, list) or not resolutions:
         return None
-    # Prefer 'original' tag, fall back to last (largest) resolution
     for res in resolutions:
         if isinstance(res, dict) and res.get("tag") == "original":
             url = res.get("url")
@@ -49,13 +40,44 @@ def _extract_thumbnail(raw: dict[str, Any]) -> str | None:
     return None
 
 
+def _parse_pub_time(content: dict[str, Any]) -> int | None:
+    from datetime import datetime, timezone
+
+    pub_date = content.get("pubDate") or content.get("displayTime")
+    if not isinstance(pub_date, str):
+        return content.get("providerPublishTime")
+    try:
+        dt = datetime.fromisoformat(pub_date.replace("Z", "+00:00"))
+        return int(dt.replace(tzinfo=timezone.utc if dt.tzinfo is None else dt.tzinfo).timestamp())
+    except (ValueError, OSError):
+        return None
+
+
 def _normalize_article(raw: dict[str, Any]) -> dict[str, Any]:
-    """Normalize a raw yfinance news dict into a clean article dict."""
-    article: dict[str, Any] = {}
-    for key in _ARTICLE_KEYS:
-        article[key] = raw.get(key)
-    article["thumbnail_url"] = _extract_thumbnail(raw)
-    return article
+    content = raw.get("content")
+    if isinstance(content, dict):
+        provider = content.get("provider")
+        canonical = content.get("canonicalUrl") or content.get("clickThroughUrl")
+        return {
+            "uuid": raw.get("id") or content.get("id"),
+            "title": content.get("title"),
+            "link": canonical.get("url") if isinstance(canonical, dict) else None,
+            "publisher": provider.get("displayName") if isinstance(provider, dict) else None,
+            "providerPublishTime": _parse_pub_time(content),
+            "type": content.get("contentType"),
+            "relatedTickers": None,
+            "thumbnail_url": _extract_thumbnail(content),
+        }
+    return {
+        "uuid": raw.get("uuid"),
+        "title": raw.get("title"),
+        "link": raw.get("link"),
+        "publisher": raw.get("publisher"),
+        "providerPublishTime": raw.get("providerPublishTime"),
+        "type": raw.get("type"),
+        "relatedTickers": raw.get("relatedTickers"),
+        "thumbnail_url": _extract_thumbnail(raw),
+    }
 
 
 def get_news(ticker: str, count: int = 10) -> dict[str, Any]:
