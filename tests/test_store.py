@@ -54,8 +54,8 @@ class TestSaveAndLoad:
         store.save("OLD", df, data_dir=tmp_path)
 
         removed = store.clean(keep_days=365, data_dir=tmp_path)
-        assert "OLD" in removed
-        assert removed["OLD"] > 0
+        assert "OLD_1d" in removed
+        assert removed["OLD_1d"] > 0
 
         loaded = store.load("OLD", data_dir=tmp_path)
         assert all(loaded.index >= pd.Timestamp(date.today()) - pd.Timedelta(days=365))
@@ -71,3 +71,45 @@ class TestSaveAndLoad:
         assert "first_date" in status[0]
         assert "last_date" in status[0]
         assert "size_kb" in status[0]
+
+    def test_save_and_load_with_interval(self, tmp_path, sample_ohlcv):
+        df = sample_ohlcv(days=5)
+        store.save("AAPL", df, data_dir=tmp_path, interval="1h")
+
+        parquet_path = tmp_path / "AAPL_1h.parquet"
+        assert parquet_path.exists()
+
+        loaded = store.load("AAPL", data_dir=tmp_path, interval="1h")
+        assert not loaded.empty
+        assert len(loaded) == 5
+
+    def test_lazy_migration(self, tmp_path, sample_ohlcv):
+        df = sample_ohlcv(days=5)
+        legacy_path = tmp_path / "AAPL.parquet"
+        df.to_parquet(legacy_path, engine="pyarrow")
+
+        store.invalidate_cache()
+        loaded = store.load("AAPL", data_dir=tmp_path, interval="1d")
+        assert not loaded.empty
+
+        new_path = tmp_path / "AAPL_1d.parquet"
+        assert new_path.exists()
+        assert not legacy_path.exists()
+
+    def test_list_tickers_with_intervals(self, tmp_path, sample_ohlcv):
+        df = sample_ohlcv(days=5)
+        store.save("AAPL", df, data_dir=tmp_path, interval="1d")
+        store.save("AAPL", df, data_dir=tmp_path, interval="1h")
+        store.save("GOOG", df, data_dir=tmp_path, interval="1d")
+
+        tickers = store.list_tickers(data_dir=tmp_path)
+        assert set(tickers) == {"AAPL", "GOOG"}
+
+    def test_status_includes_interval(self, tmp_path, sample_ohlcv):
+        df = sample_ohlcv(days=5)
+        store.save("AAPL", df, data_dir=tmp_path, interval="1h")
+
+        status = store.status(data_dir=tmp_path)
+        assert len(status) == 1
+        assert status[0]["interval"] == "1h"
+        assert status[0]["ticker"] == "AAPL"

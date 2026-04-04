@@ -21,6 +21,7 @@ class ClosePoint(BaseModel):
 
 class TickerStatus(BaseModel):
     ticker: str
+    interval: str = "1d"
     rows: int
     first_date: str
     last_date: str
@@ -64,3 +65,11 @@ class PriceUpdate(BaseModel):
 class WSMessage(BaseModel):
     type: str
     data: list[PriceUpdate] | str
+
+
+class WatchlistResponse(BaseModel):
+    tickers: list[str]
+
+
+class WatchlistAddRequest(BaseModel):
+    ticker: str

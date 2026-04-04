@@ -19,8 +19,8 @@ from starlette.responses import Response
 
 from fastapi.routing import APIRouter
 
-from market_data import store
-from market_data.config import CORS_ORIGINS, WS_POLL_INTERVAL
+from market_data import store, watchlist
+from market_data.config import CORS_ORIGINS, DATA_DIR, DEFAULT_INTERVAL, VALID_INTERVALS, WS_POLL_INTERVAL
 from market_data.exceptions import (
     InvalidTickerError,
     MarketDataError,
@@ -35,6 +35,8 @@ from market_data.schemas import (
     PriceUpdate,
     ReadyResponse,
     TickerStatus,
+    WatchlistAddRequest,
+    WatchlistResponse,
     WSMessage,
 )
 
@@ -63,7 +65,6 @@ def _is_rate_limited(client_ip: str) -> bool:
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     global _price_task
-    from market_data.config import DATA_DIR
     from market_data.logging_config import setup_logging
 
     setup_logging()
@@ -220,8 +221,6 @@ def health() -> dict[str, str]:
 
 @app.get("/ready", response_model=ReadyResponse)
 def ready() -> dict[str, object]:
-    from market_data.config import DATA_DIR
-
     data_ok = DATA_DIR.exists()
     tickers = store.list_tickers() if data_ok else []
     return {
@@ -288,8 +287,14 @@ async def get_ohlcv(
     days: int = Query(default=365, ge=1, le=3650),
     limit: int = Query(default=0, ge=0, le=10000),
     offset: int = Query(default=0, ge=0),
+    interval: str = Query(default=DEFAULT_INTERVAL),
 ) -> list[OHLCVBar]:
-    df = await asyncio.to_thread(store.load, ticker, days)
+    if interval not in VALID_INTERVALS:
+        return JSONResponse(  # type: ignore[return-value]
+            status_code=400,
+            content={"error": f"Invalid interval {interval!r}. Valid: {VALID_INTERVALS}"},
+        )
+    df = await asyncio.to_thread(store.load, ticker, days, DATA_DIR, interval)
     records = _ohlcv_records(df)
     if offset:
         records = records[offset:]
@@ -306,18 +311,41 @@ async def get_latest(ticker: str) -> dict[str, object] | None:
 
 
 @v1.get("/compare", response_model=dict[str, list[ClosePoint]])
-async def get_compare(
-    tickers: str = Query(description="Comma-separated tickers, e.g. QQQ,XOM,CRM"),
+async def get_compare(    tickers: str = Query(description="Comma-separated tickers, e.g. QQQ,XOM,CRM"),
     days: int = Query(default=90, ge=1, le=3650),
+    interval: str = Query(default=DEFAULT_INTERVAL),
 ) -> dict[str, list[ClosePoint]]:
+    if interval not in VALID_INTERVALS:
+        return JSONResponse(  # type: ignore[return-value]
+            status_code=400,
+            content={"error": f"Invalid interval {interval!r}. Valid: {VALID_INTERVALS}"},
+        )
     result: dict[str, list[ClosePoint]] = {}
     for t in tickers.split(","):
         t = t.strip()
         if not t:
             continue
-        df = await asyncio.to_thread(store.load, t, days)
+        df = await asyncio.to_thread(store.load, t, days, DATA_DIR, interval)
         result[t] = _close_records(df)
     return result
+
+
+@v1.get("/watchlist", response_model=WatchlistResponse)
+async def get_watchlist() -> dict[str, list[str]]:
+    tickers = await asyncio.to_thread(watchlist.list_tickers)
+    return {"tickers": tickers}
+
+
+@v1.post("/watchlist", response_model=WatchlistResponse)
+async def add_to_watchlist(body: WatchlistAddRequest) -> WatchlistResponse:
+    wl = await asyncio.to_thread(watchlist.add_ticker, body.ticker)
+    return WatchlistResponse(tickers=wl.tickers)
+
+
+@v1.delete("/watchlist/{ticker}", response_model=WatchlistResponse)
+async def delete_from_watchlist(ticker: str) -> WatchlistResponse:
+    wl = await asyncio.to_thread(watchlist.remove_ticker, ticker)
+    return WatchlistResponse(tickers=wl.tickers)
 
 
 app.include_router(v1)
@@ -327,4 +355,7 @@ legacy.add_api_route("/tickers", get_tickers, methods=["GET"])
 legacy.add_api_route("/ohlcv/{ticker}", get_ohlcv, methods=["GET"])
 legacy.add_api_route("/latest/{ticker}", get_latest, methods=["GET"])
 legacy.add_api_route("/compare", get_compare, methods=["GET"])
+legacy.add_api_route("/watchlist", get_watchlist, methods=["GET"])
+legacy.add_api_route("/watchlist", add_to_watchlist, methods=["POST"])
+legacy.add_api_route("/watchlist/{ticker}", delete_from_watchlist, methods=["DELETE"])
 app.include_router(legacy)

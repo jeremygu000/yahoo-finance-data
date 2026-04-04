@@ -1,39 +1,25 @@
-"""Parquet store: ~/.market_data/parquet/{TICKER}.parquet
-
-Ticker sanitization: "^VIX" -> "VIX", "/" -> "_".
-"""
-
 from __future__ import annotations
 
 import logging
 import re
 import tempfile
-import threading
-import time
 from datetime import date
 from pathlib import Path
 
 import pandas as pd
 
-from market_data.config import DATA_DIR
+from market_data.cache import InMemoryCache
+from market_data.config import CACHE_MAX_ENTRIES, CACHE_TTL_SECONDS, DATA_DIR, VALID_INTERVALS
 from market_data.exceptions import InvalidTickerError
 
 logger = logging.getLogger(__name__)
 
-CACHE_TTL_SECONDS = 60
-_cache: dict[str, tuple[float, pd.DataFrame]] = {}
-_cache_lock = threading.Lock()
+_cache = InMemoryCache(ttl_seconds=CACHE_TTL_SECONDS, max_entries=CACHE_MAX_ENTRIES)
 
-# Alphanumeric, ^, -, ., / (caret for ^VIX, slash for BRK/B, dot for BRK.B)
 _TICKER_PATTERN = re.compile(r"^[\w\^./\\-]{1,20}$")
 
 
 def validate_ticker(ticker: str) -> str:
-    """Validate and sanitize a ticker symbol.
-
-    Raises InvalidTickerError for empty, too long, or invalid-character tickers.
-    Returns the sanitized (uppercase, safe-for-filename) ticker.
-    """
     if not ticker or not ticker.strip():
         raise InvalidTickerError(ticker, "Ticker symbol cannot be empty")
 
@@ -49,33 +35,32 @@ def _sanitize_ticker(ticker: str) -> str:
     return ticker.replace("^", "").replace("/", "_").replace("\\", "_").upper()
 
 
-def _parquet_path(ticker: str, data_dir: Path = DATA_DIR) -> Path:
+def _parquet_path(ticker: str, interval: str = "1d", data_dir: Path = DATA_DIR) -> Path:
     safe_name = validate_ticker(ticker)
-    path = (data_dir / f"{safe_name}.parquet").resolve()
+    new_path = (data_dir / f"{safe_name}_{interval}.parquet").resolve()
 
-    # Path traversal defense: ensure resolved path is inside data_dir
-    if not str(path).startswith(str(data_dir.resolve())):
+    if not str(new_path).startswith(str(data_dir.resolve())):
         raise InvalidTickerError(ticker, "Path traversal detected")
 
-    return path
+    if not new_path.exists() and interval == "1d":
+        legacy_path = (data_dir / f"{safe_name}.parquet").resolve()
+        if legacy_path.exists():
+            legacy_path.rename(new_path)
+
+    return new_path
 
 
 def invalidate_cache(ticker: str | None = None) -> None:
-    """Clear cached DataFrames. Pass ticker to clear one, or None to clear all."""
-    with _cache_lock:
-        if ticker is None:
-            _cache.clear()
-        else:
-            safe = validate_ticker(ticker)
-            keys = [k for k in _cache if k.startswith(safe + ":")]
-            for k in keys:
-                del _cache[k]
+    if ticker is None:
+        _cache.clear()
+    else:
+        safe = validate_ticker(ticker)
+        _cache.delete_prefix(safe + ":")
 
 
-def save(ticker: str, df: pd.DataFrame, data_dir: Path = DATA_DIR) -> int:
-    """Append-save DataFrame to parquet, deduplicating by date. Returns new row count."""
+def save(ticker: str, df: pd.DataFrame, data_dir: Path = DATA_DIR, interval: str = "1d") -> int:
     data_dir.mkdir(parents=True, exist_ok=True)
-    path = _parquet_path(ticker, data_dir)
+    path = _parquet_path(ticker, interval=interval, data_dir=data_dir)
 
     if path.exists():
         existing = pd.read_parquet(path)
@@ -88,7 +73,6 @@ def save(ticker: str, df: pd.DataFrame, data_dir: Path = DATA_DIR) -> int:
     combined = combined[~combined.index.duplicated(keep="last")]
     combined.sort_index(inplace=True)
 
-    # Atomic write: write to temp file then rename to avoid partial writes
     tmp_fd, tmp_path = tempfile.mkstemp(dir=data_dir, suffix=".parquet.tmp")
     try:
         import os
@@ -106,28 +90,21 @@ def save(ticker: str, df: pd.DataFrame, data_dir: Path = DATA_DIR) -> int:
     return rows_added
 
 
-def load(ticker: str, days: int | None = None, data_dir: Path = DATA_DIR) -> pd.DataFrame:
-    """Load OHLCV data from local parquet. Returns empty DataFrame if not found."""
-    path = _parquet_path(ticker, data_dir)
+def load(ticker: str, days: int | None = None, data_dir: Path = DATA_DIR, interval: str = "1d") -> pd.DataFrame:
+    path = _parquet_path(ticker, interval=interval, data_dir=data_dir)
     if not path.exists():
         logger.warning("%s: no local data at %s", ticker, path)
         return pd.DataFrame()
 
     safe = validate_ticker(ticker)
-    cache_key = f"{safe}:{data_dir}"
+    cache_key = f"{safe}:{interval}:{data_dir}"
 
-    with _cache_lock:
-        if cache_key in _cache:
-            ts, cached_df = _cache[cache_key]
-            if time.monotonic() - ts < CACHE_TTL_SECONDS:
-                df = cached_df
-            else:
-                del _cache[cache_key]
-                df = pd.read_parquet(path)
-                _cache[cache_key] = (time.monotonic(), df)
-        else:
-            df = pd.read_parquet(path)
-            _cache[cache_key] = (time.monotonic(), df)
+    cached = _cache.get(cache_key)
+    if cached is not None:
+        df = cached
+    else:
+        df = pd.read_parquet(path)
+        _cache.set(cache_key, df)
 
     if days is not None:
         cutoff = pd.Timestamp(date.today()) - pd.Timedelta(days=days)
@@ -136,9 +113,8 @@ def load(ticker: str, days: int | None = None, data_dir: Path = DATA_DIR) -> pd.
     return df
 
 
-def last_date(ticker: str, data_dir: Path = DATA_DIR) -> date | None:
-    """Most recent date in stored data, or None."""
-    path = _parquet_path(ticker, data_dir)
+def last_date(ticker: str, data_dir: Path = DATA_DIR, interval: str = "1d") -> date | None:
+    path = _parquet_path(ticker, interval=interval, data_dir=data_dir)
     if not path.exists():
         return None
 
@@ -151,14 +127,21 @@ def last_date(ticker: str, data_dir: Path = DATA_DIR) -> date | None:
 
 
 def list_tickers(data_dir: Path = DATA_DIR) -> list[str]:
-    """All ticker names with stored data."""
     if not data_dir.exists():
         return []
-    return sorted(p.stem for p in data_dir.glob("*.parquet"))
+
+    tickers: set[str] = set()
+    for p in data_dir.glob("*.parquet"):
+        stem = p.stem
+        parts = stem.rsplit("_", 1)
+        if len(parts) == 2 and parts[1] in VALID_INTERVALS:
+            tickers.add(parts[0])
+        else:
+            tickers.add(stem)
+    return sorted(tickers)
 
 
 def status(data_dir: Path = DATA_DIR) -> list[dict[str, object]]:
-    """Status info for all cached tickers: ticker, rows, first_date, last_date, size_kb."""
     if not data_dir.exists():
         return []
 
@@ -167,9 +150,20 @@ def status(data_dir: Path = DATA_DIR) -> list[dict[str, object]]:
         df = pd.read_parquet(path)
         if df.empty:
             continue
+
+        stem = path.stem
+        parts = stem.rsplit("_", 1)
+        if len(parts) == 2 and parts[1] in VALID_INTERVALS:
+            ticker_name = parts[0]
+            interval_name = parts[1]
+        else:
+            ticker_name = stem
+            interval_name = "1d"
+
         result.append(
             {
-                "ticker": path.stem,
+                "ticker": ticker_name,
+                "interval": interval_name,
                 "rows": len(df),
                 "first_date": df.index.min().date().isoformat(),
                 "last_date": df.index.max().date().isoformat(),
@@ -180,7 +174,6 @@ def status(data_dir: Path = DATA_DIR) -> list[dict[str, object]]:
 
 
 def clean(keep_days: int = 365, data_dir: Path = DATA_DIR) -> dict[str, int]:
-    """Remove data older than keep_days. Returns {ticker: rows_removed}."""
     if not data_dir.exists():
         return {}
 

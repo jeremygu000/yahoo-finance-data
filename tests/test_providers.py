@@ -136,6 +136,13 @@ class TestYFinanceProvider:
     def test_always_available(self) -> None:
         assert YFinanceProvider().is_available()
 
+    def test_supported_intervals(self) -> None:
+        intervals = YFinanceProvider().supported_intervals
+        assert "1d" in intervals
+        assert "1h" in intervals
+        assert "15m" in intervals
+        assert "5m" in intervals
+
     @patch("market_data.providers.yfinance.yf.download")
     def test_fetch_ohlcv(self, mock_dl: MagicMock) -> None:
         mock_dl.return_value = _make_raw_ohlcv()
@@ -143,6 +150,15 @@ class TestYFinanceProvider:
         result = provider.fetch_ohlcv("AAPL", date(2024, 1, 1), date(2024, 12, 31))
         assert not result.empty
         assert list(result.columns) == OHLCV_COLUMNS
+
+    @patch("market_data.providers.yfinance.yf.download")
+    def test_fetch_ohlcv_with_interval(self, mock_dl: MagicMock) -> None:
+        mock_dl.return_value = _make_raw_ohlcv()
+        provider = YFinanceProvider()
+        result = provider.fetch_ohlcv("AAPL", date(2024, 1, 1), date(2024, 12, 31), interval="1h")
+        assert not result.empty
+        call_kwargs = mock_dl.call_args[1]
+        assert call_kwargs["interval"] == "1h"
 
     @patch("market_data.providers.yfinance.yf.download")
     def test_fetch_ohlcv_all_retries_fail(self, mock_dl: MagicMock) -> None:
@@ -163,6 +179,10 @@ class TestTiingoProvider:
 
     def test_available_with_key(self) -> None:
         assert TiingoProvider(api_key="test_key").is_available()
+
+    def test_supported_intervals(self) -> None:
+        intervals = TiingoProvider().supported_intervals
+        assert intervals == ["1d"]
 
     @patch("market_data.providers.tiingo.requests.get")
     def test_fetch_ohlcv(self, mock_get: MagicMock) -> None:
@@ -190,6 +210,11 @@ class TestTiingoProvider:
         result = provider.fetch_ohlcv("AAPL", date(2024, 1, 1), date(2024, 12, 31))
         assert result.empty
 
+    def test_fetch_ohlcv_non_daily_returns_empty(self) -> None:
+        provider = TiingoProvider(api_key="test_key")
+        result = provider.fetch_ohlcv("AAPL", date(2024, 1, 1), date(2024, 12, 31), interval="1h")
+        assert result.empty
+
 
 class TestFMPProvider:
     def test_name(self) -> None:
@@ -201,6 +226,10 @@ class TestFMPProvider:
 
     def test_available_with_key(self) -> None:
         assert FMPProvider(api_key="test_key").is_available()
+
+    def test_supported_intervals(self) -> None:
+        intervals = FMPProvider().supported_intervals
+        assert intervals == ["1d"]
 
     @patch("market_data.providers.fmp.requests.get")
     def test_fetch_ohlcv(self, mock_get: MagicMock) -> None:
@@ -235,6 +264,11 @@ class TestFMPProvider:
     def test_fetch_ohlcv_no_key(self) -> None:
         provider = FMPProvider(api_key="")
         result = provider.fetch_ohlcv("AAPL", date(2024, 1, 1), date(2024, 12, 31))
+        assert result.empty
+
+    def test_fetch_ohlcv_non_daily_returns_empty(self) -> None:
+        provider = FMPProvider(api_key="test_key")
+        result = provider.fetch_ohlcv("AAPL", date(2024, 1, 1), date(2024, 12, 31), interval="1h")
         assert result.empty
 
 

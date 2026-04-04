@@ -16,6 +16,9 @@ DEFAULT_TICKERS: list[str] = [
 LOOKBACK_DAYS = int(os.environ.get("MARKET_DATA_LOOKBACK_DAYS", "365"))
 MIN_ROLLING_DAYS = 30
 FETCH_INTERVAL = "1d"
+
+VALID_INTERVALS: list[str] = ["1d", "1h", "15m", "5m"]
+DEFAULT_INTERVAL = "1d"
 MAX_RETRIES = int(os.environ.get("MARKET_DATA_MAX_RETRIES", "3"))
 RETRY_DELAY_RANGE = (1.0, 3.0)
 
@@ -25,3 +28,6 @@ CORS_ORIGINS: list[str] = [
 ]
 
 WS_POLL_INTERVAL = int(os.environ.get("MARKET_DATA_WS_POLL_INTERVAL", "30"))
+
+CACHE_TTL_SECONDS = int(os.environ.get("MARKET_DATA_CACHE_TTL", "60"))
+CACHE_MAX_ENTRIES = int(os.environ.get("MARKET_DATA_CACHE_MAX_ENTRIES", "256"))

@@ -1,5 +1,3 @@
-"""YFinance provider — wraps yfinance library."""
-
 from __future__ import annotations
 
 import logging
@@ -21,10 +19,14 @@ class YFinanceProvider(MarketDataProvider):
     def name(self) -> str:
         return "yfinance"
 
+    @property
+    def supported_intervals(self) -> list[str]:
+        return ["1d", "1h", "15m", "5m"]
+
     def is_available(self) -> bool:
         return True
 
-    def fetch_ohlcv(self, ticker: str, start: date, end: date) -> pd.DataFrame:
+    def fetch_ohlcv(self, ticker: str, start: date, end: date, interval: str = "1d") -> pd.DataFrame:
         end_inclusive = end + timedelta(days=1)
         for attempt in range(1, MAX_RETRIES + 1):
             try:
@@ -32,6 +34,7 @@ class YFinanceProvider(MarketDataProvider):
                     tickers=[ticker],
                     start=start.isoformat(),
                     end=end_inclusive.isoformat(),
+                    interval=interval,
                     group_by="ticker",
                     threads=False,
                     repair=True,
@@ -48,7 +51,9 @@ class YFinanceProvider(MarketDataProvider):
 
         return _normalize(raw)
 
-    def fetch_batch(self, tickers: list[str], start: date, end: date) -> dict[str, pd.DataFrame]:
+    def fetch_batch(
+        self, tickers: list[str], start: date, end: date, interval: str = "1d"
+    ) -> dict[str, pd.DataFrame]:
         if not tickers:
             return {}
 
@@ -60,6 +65,7 @@ class YFinanceProvider(MarketDataProvider):
                     tickers=tickers,
                     start=start.isoformat(),
                     end=end_inclusive.isoformat(),
+                    interval=interval,
                     group_by="ticker",
                     threads=True,
                     repair=True,

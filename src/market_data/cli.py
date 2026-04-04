@@ -5,10 +5,11 @@ import logging
 import sys
 from datetime import date, timedelta
 
-from market_data.config import DEFAULT_TICKERS, LOOKBACK_DAYS, MIN_ROLLING_DAYS
+from market_data.config import DEFAULT_TICKERS, LOOKBACK_DAYS, MIN_ROLLING_DAYS, VALID_INTERVALS
 from market_data.fetcher import fetch_batch
 from market_data.logging_config import setup_logging
 from market_data.store import clean, last_date, save, status
+from market_data.watchlist import add_ticker, list_tickers, remove_ticker
 
 logger = logging.getLogger(__name__)
 
@@ -85,6 +86,56 @@ def cmd_clean(args: argparse.Namespace) -> None:
     print(f"Total: {sum(removed.values())} rows removed.")
 
 
+def cmd_backfill(args: argparse.Namespace) -> None:
+    tickers = [t.strip() for t in args.ticker.split(",") if t.strip()]
+    start = date.fromisoformat(args.start)
+    end = date.fromisoformat(args.end) if args.end else date.today()
+    interval: str = args.interval
+
+    if interval not in VALID_INTERVALS:
+        print(f"Error: invalid interval '{interval}'. Must be one of: {', '.join(VALID_INTERVALS)}")
+        sys.exit(1)
+
+    print(f"Fetching {len(tickers)} tickers from {start} to {end} (interval={interval})")
+
+    data = fetch_batch(tickers, start=start, end=end, interval=interval)
+
+    if not data:
+        print("No data returned")
+        sys.exit(1)
+
+    total_new = 0
+    for ticker, df in data.items():
+        new_rows = save(ticker, df, interval=interval)
+        total_new += new_rows
+        print(f"  {ticker}: +{new_rows} rows")
+
+    missing = set(tickers) - set(data.keys())
+    if missing:
+        print(f"Missing: {', '.join(sorted(missing))}")
+
+    print(f"Done. {total_new} new rows added.")
+
+
+def cmd_watchlist(_args: argparse.Namespace) -> None:
+    tickers = list_tickers()
+    if not tickers:
+        print("Watchlist is empty.")
+    else:
+        for t in tickers:
+            print(t)
+
+
+def cmd_watchlist_add(args: argparse.Namespace) -> None:
+    wl = add_ticker(args.ticker)
+    print(f"Added {args.ticker.upper()}. Watchlist: {wl.tickers}")
+
+
+def cmd_watchlist_remove(args: argparse.Namespace) -> None:
+    wl = remove_ticker(args.ticker)
+    print(f"Removed {args.ticker.upper()}. Watchlist: {wl.tickers}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         prog="market-data",
@@ -102,6 +153,26 @@ def main() -> None:
     p_clean = sub.add_parser("clean", help="Remove old data")
     p_clean.add_argument("--keep-days", type=int, default=365, help="Keep data within N days")
 
+    p_backfill = sub.add_parser("backfill", help="Backfill historical data for specified tickers")
+    p_backfill.add_argument("--ticker", type=str, required=True, help="Comma-separated ticker list (e.g. AAPL,MSFT)")
+    p_backfill.add_argument("--start", type=str, required=True, help="Start date (YYYY-MM-DD)")
+    p_backfill.add_argument("--end", type=str, default=None, help="End date (YYYY-MM-DD, default today)")
+    p_backfill.add_argument(
+        "--interval",
+        type=str,
+        default="1d",
+        choices=VALID_INTERVALS,
+        help=f"Data interval (default: 1d, choices: {', '.join(VALID_INTERVALS)})",
+    )
+
+    sub.add_parser("watchlist", help="Show current watchlist")
+
+    p_wl_add = sub.add_parser("watchlist-add", help="Add ticker to watchlist")
+    p_wl_add.add_argument("--ticker", type=str, required=True, help="Ticker to add")
+
+    p_wl_remove = sub.add_parser("watchlist-remove", help="Remove ticker from watchlist")
+    p_wl_remove.add_argument("--ticker", type=str, required=True, help="Ticker to remove")
+
     args = parser.parse_args()
     setup_logging(json_format=False, level=logging.DEBUG if args.verbose else logging.INFO)
 
@@ -109,6 +180,10 @@ def main() -> None:
         "fetch": cmd_fetch,
         "status": cmd_status,
         "clean": cmd_clean,
+        "backfill": cmd_backfill,
+        "watchlist": cmd_watchlist,
+        "watchlist-add": cmd_watchlist_add,
+        "watchlist-remove": cmd_watchlist_remove,
     }
 
     handler = commands.get(args.command)

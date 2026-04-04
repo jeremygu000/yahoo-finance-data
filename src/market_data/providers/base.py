@@ -19,14 +19,20 @@ class MarketDataProvider(ABC):
     def name(self) -> str:
         """Provider identifier, e.g. 'yfinance', 'tiingo', 'fmp'."""
 
+    @property
+    def supported_intervals(self) -> list[str]:
+        """Intervals supported by this provider. Override in subclasses."""
+        return ["1d"]
+
     @abstractmethod
     def fetch_ohlcv(
         self,
         ticker: str,
         start: date,
         end: date,
+        interval: str = "1d",
     ) -> pd.DataFrame:
-        """Fetch daily OHLCV for a single ticker.
+        """Fetch OHLCV for a single ticker.
 
         Returns DataFrame with DatetimeIndex named 'Date' and columns
         [Open, High, Low, Close, Volume]. Empty DataFrame if no data.
@@ -37,11 +43,12 @@ class MarketDataProvider(ABC):
         tickers: list[str],
         start: date,
         end: date,
+        interval: str = "1d",
     ) -> dict[str, pd.DataFrame]:
         """Fetch OHLCV for multiple tickers. Default: sequential calls."""
         result: dict[str, pd.DataFrame] = {}
         for ticker in tickers:
-            df = self.fetch_ohlcv(ticker, start, end)
+            df = self.fetch_ohlcv(ticker, start, end, interval=interval)
             if not df.empty:
                 result[ticker] = df
         return result

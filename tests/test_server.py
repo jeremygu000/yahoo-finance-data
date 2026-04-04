@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 
 from market_data.exceptions import InvalidTickerError, TickerNotFoundError
 from market_data.server import app
+import market_data.watchlist as wl_mod
 
 client = TestClient(app, raise_server_exceptions=False)
 
@@ -110,7 +111,10 @@ class TestGetOhlcv:
             resp = client.get("/api/ohlcv/SPY", params={"days": 30})
 
         assert resp.status_code == 200
-        mock_load.assert_called_once_with("SPY", 30)
+        mock_load.assert_called_once()
+        args, kwargs = mock_load.call_args
+        assert args[0] == "SPY"
+        assert args[1] == 30
 
     def test_days_validation(self) -> None:
         resp = client.get("/api/ohlcv/SPY", params={"days": 0})
@@ -233,6 +237,34 @@ class TestRateLimit:
         _request_log.clear()
 
 
+class TestGetOhlcvInterval:
+    def test_ohlcv_with_interval(self, sample_ohlcv) -> None:
+        df = sample_ohlcv(days=5)
+
+        with patch("market_data.server.store.load", return_value=df):
+            resp = client.get("/api/v1/ohlcv/AAPL", params={"interval": "1h"})
+
+        assert resp.status_code == 200
+
+    def test_ohlcv_invalid_interval(self) -> None:
+        resp = client.get("/api/v1/ohlcv/AAPL", params={"interval": "3m"})
+        assert resp.status_code == 400
+        assert "error" in resp.json()
+
+    def test_compare_with_interval(self, sample_ohlcv) -> None:
+        df = sample_ohlcv(days=5)
+
+        with patch("market_data.server.store.load", return_value=df):
+            resp = client.get("/api/v1/compare", params={"tickers": "AAPL,GOOG", "interval": "1h"})
+
+        assert resp.status_code == 200
+
+    def test_compare_invalid_interval(self) -> None:
+        resp = client.get("/api/v1/compare", params={"tickers": "AAPL", "interval": "3m"})
+        assert resp.status_code == 400
+        assert "error" in resp.json()
+
+
 class TestWebSocket:
     def test_ws_connect_and_disconnect(self) -> None:
         with client.websocket_connect("/ws/prices") as ws:
@@ -272,3 +304,31 @@ class TestWebSocket:
             assert len(data["data"]) == 1
             assert data["data"][0]["ticker"] == "AAPL"
             assert data["data"][0]["close"] == 104.0
+
+
+class TestWatchlist:
+    @pytest.fixture(autouse=True)
+    def isolated_watchlist(self, tmp_path: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(wl_mod, "WATCHLIST_PATH", tmp_path / "watchlist.json")
+
+    def test_get_empty_watchlist(self) -> None:
+        resp = client.get("/api/v1/watchlist")
+        assert resp.status_code == 200
+        assert resp.json() == {"tickers": []}
+
+    def test_add_to_watchlist(self) -> None:
+        resp = client.post("/api/v1/watchlist", json={"ticker": "AAPL"})
+        assert resp.status_code == 200
+        assert "AAPL" in resp.json()["tickers"]
+
+    def test_delete_from_watchlist(self) -> None:
+        client.post("/api/v1/watchlist", json={"ticker": "MSFT"})
+        resp = client.delete("/api/v1/watchlist/MSFT")
+        assert resp.status_code == 200
+        assert "MSFT" not in resp.json()["tickers"]
+
+    def test_add_duplicate_watchlist(self) -> None:
+        client.post("/api/v1/watchlist", json={"ticker": "GOOG"})
+        client.post("/api/v1/watchlist", json={"ticker": "GOOG"})
+        resp = client.get("/api/v1/watchlist")
+        assert resp.json()["tickers"].count("GOOG") == 1

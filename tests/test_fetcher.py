@@ -23,22 +23,36 @@ def _make_ohlcv(rows: int = 2) -> pd.DataFrame:
 
 
 class _FakeProvider(MarketDataProvider):
-    def __init__(self, name: str, available: bool, data: dict[str, pd.DataFrame] | None = None) -> None:
+    def __init__(
+        self,
+        name: str,
+        available: bool,
+        data: dict[str, pd.DataFrame] | None = None,
+        intervals: list[str] | None = None,
+    ) -> None:
         self._name = name
         self._available = available
         self._data = data or {}
+        self._intervals = intervals if intervals is not None else ["1d"]
+        self._last_interval: str | None = None
 
     @property
     def name(self) -> str:
         return self._name
 
+    @property
+    def supported_intervals(self) -> list[str]:
+        return self._intervals
+
     def is_available(self) -> bool:
         return self._available
 
-    def fetch_ohlcv(self, ticker: str, start: date, end: date) -> pd.DataFrame:
+    def fetch_ohlcv(self, ticker: str, start: date, end: date, interval: str = "1d") -> pd.DataFrame:
+        self._last_interval = interval
         return self._data.get(ticker, pd.DataFrame())
 
-    def fetch_batch(self, tickers: list[str], start: date, end: date) -> dict[str, pd.DataFrame]:
+    def fetch_batch(self, tickers: list[str], start: date, end: date, interval: str = "1d") -> dict[str, pd.DataFrame]:
+        self._last_interval = interval
         return {t: self._data[t] for t in tickers if t in self._data}
 
 
@@ -92,3 +106,33 @@ class TestFetchBatch:
         result = fetch_batch(["AAPL"])
 
         assert "AAPL" in result
+
+    @patch("market_data.fetcher.get_fallback_chain")
+    def test_interval_passed_through(self, mock_chain: MagicMock) -> None:
+        primary = _FakeProvider("test", True, {"AAPL": _make_ohlcv()}, intervals=["1d", "1h"])
+        mock_chain.return_value = [primary]
+
+        fetch_batch(["AAPL"], start=date(2024, 1, 1), end=date(2024, 12, 31), interval="1h")
+
+        assert primary._last_interval == "1h"
+
+    @patch("market_data.fetcher.get_fallback_chain")
+    def test_unsupported_interval_skips_provider(self, mock_chain: MagicMock) -> None:
+        daily_only = _FakeProvider("daily_only", True, {"AAPL": _make_ohlcv()}, intervals=["1d"])
+        full_support = _FakeProvider("full", True, {"AAPL": _make_ohlcv()}, intervals=["1d", "1h"])
+        mock_chain.return_value = [daily_only, full_support]
+
+        result = fetch_batch(["AAPL"], start=date(2024, 1, 1), end=date(2024, 12, 31), interval="1h")
+
+        assert "AAPL" in result
+        assert daily_only._last_interval is None
+        assert full_support._last_interval == "1h"
+
+    @patch("market_data.fetcher.get_fallback_chain")
+    def test_no_provider_supports_interval(self, mock_chain: MagicMock) -> None:
+        daily_only = _FakeProvider("daily_only", True, {"AAPL": _make_ohlcv()}, intervals=["1d"])
+        mock_chain.return_value = [daily_only]
+
+        result = fetch_batch(["AAPL"], start=date(2024, 1, 1), end=date(2024, 12, 31), interval="1h")
+
+        assert result == {}

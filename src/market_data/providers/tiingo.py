@@ -22,10 +22,18 @@ class TiingoProvider(MarketDataProvider):
     def name(self) -> str:
         return "tiingo"
 
+    @property
+    def supported_intervals(self) -> list[str]:
+        return ["1d"]
+
     def is_available(self) -> bool:
         return bool(self._api_key)
 
-    def fetch_ohlcv(self, ticker: str, start: date, end: date) -> pd.DataFrame:
+    def fetch_ohlcv(self, ticker: str, start: date, end: date, interval: str = "1d") -> pd.DataFrame:
+        if interval != "1d":
+            logger.warning("Tiingo only supports daily data; ignoring interval=%s for %s", interval, ticker)
+            return pd.DataFrame()
+
         if not self._api_key:
             logger.warning("Tiingo API key not configured")
             return pd.DataFrame()

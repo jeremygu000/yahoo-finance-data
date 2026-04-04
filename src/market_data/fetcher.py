@@ -1,5 +1,3 @@
-"""Batch fetcher with provider fallback chain."""
-
 from __future__ import annotations
 
 import logging
@@ -17,6 +15,7 @@ def fetch_batch(
     start: date | None = None,
     end: date | None = None,
     period: str | None = None,
+    interval: str = "1d",
 ) -> dict[str, pd.DataFrame]:
     if not tickers:
         return {}
@@ -31,10 +30,19 @@ def fetch_batch(
         logger.error("No providers available in fallback chain")
         return {}
 
-    primary = chain[0]
-    fallbacks = chain[1:]
+    eligible = [p for p in chain if interval in p.supported_intervals]
+    skipped = [p for p in chain if interval not in p.supported_intervals]
+    for p in skipped:
+        logger.info("Skipping provider %s: does not support interval=%s", p.name, interval)
 
-    result = primary.fetch_batch(tickers, start, end)
+    if not eligible:
+        logger.error("No providers support interval=%s", interval)
+        return {}
+
+    primary = eligible[0]
+    fallbacks = eligible[1:]
+
+    result = primary.fetch_batch(tickers, start, end, interval=interval)
     logger.info("Primary provider %s returned %d/%d tickers", primary.name, len(result), len(tickers))
 
     missing = [t for t in tickers if t not in result]
@@ -42,7 +50,7 @@ def fetch_batch(
         if not missing:
             break
         logger.info("Trying fallback %s for %d missing tickers", provider.name, len(missing))
-        fallback_result = provider.fetch_batch(missing, start, end)
+        fallback_result = provider.fetch_batch(missing, start, end, interval=interval)
         for ticker, df in fallback_result.items():
             result[ticker] = df
         missing = [t for t in missing if t not in fallback_result]
