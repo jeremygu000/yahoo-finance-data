@@ -16,7 +16,6 @@ import TrendingDownIcon from "@mui/icons-material/TrendingDown";
 import ShowChartIcon from "@mui/icons-material/ShowChart";
 import { fetchTickers, fetchLatest } from "@/lib/api";
 import type { TickerInfo, LatestQuote } from "@/lib/types";
-import { TICKERS } from "@/lib/types";
 
 interface TickerCard extends TickerInfo {
   latest: LatestQuote | null;
@@ -96,8 +95,8 @@ export default function TickerOverview() {
   if (loading) {
     return (
       <Grid container spacing={2}>
-        {TICKERS.map((t) => (
-          <Grid key={t} size={{ xs: 12, sm: 6, lg: 4 }}>
+        {Array.from({ length: 6 }, (_, i) => (
+          <Grid key={`skel-${String(i)}`} size={{ xs: 12, sm: 6, lg: 4 }}>
             <Skeleton variant="rounded" height={160} sx={{ borderRadius: "12px" }} />
           </Grid>
         ))}

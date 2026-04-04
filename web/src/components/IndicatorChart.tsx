@@ -23,8 +23,9 @@ import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Alert from "@mui/material/Alert";
 import CircularProgress from "@mui/material/CircularProgress";
 import { fetchOHLCV, fetchIndicators } from "@/lib/api";
-import { TICKERS, INDICATOR_COLORS, type IndicatorType } from "@/lib/types";
+import { INDICATOR_COLORS, type IndicatorType } from "@/lib/types";
 import { useThemeMode } from "./ThemeProvider";
+import useTickers from "@/lib/useTickers";
 
 const DAYS_OPTIONS = [30, 90, 180, 365] as const;
 type Days = (typeof DAYS_OPTIONS)[number];
@@ -64,7 +65,8 @@ export default function IndicatorChart() {
   const priceSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
   const indicatorSeriesRef = useRef<ISeriesApi<"Line" | "Histogram">[]>([]);
 
-  const [ticker, setTicker] = useState<string>("QQQ");
+  const { tickers } = useTickers();
+  const [ticker, setTicker] = useState<string>("");
   const [indicator, setIndicator] = useState<IndicatorType>("sma");
   const [period, setPeriod] = useState<number>(20);
   const [days, setDays] = useState<Days>(365);
@@ -72,6 +74,10 @@ export default function IndicatorChart() {
   const [error, setError] = useState<string | null>(null);
 
   const { mode } = useThemeMode();
+
+  useEffect(() => {
+    if (tickers.length > 0 && !ticker) setTicker(tickers[0]);
+  }, [tickers, ticker]);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -123,6 +129,7 @@ export default function IndicatorChart() {
   }, [mode]);
 
   useEffect(() => {
+    if (!ticker) return;
     async function load() {
       if (!chartRef.current || !priceSeriesRef.current) return;
 
@@ -334,7 +341,7 @@ export default function IndicatorChart() {
           <FormControl size="small" sx={{ minWidth: 100 }}>
             <InputLabel>Ticker</InputLabel>
             <Select value={ticker} label="Ticker" onChange={(e) => setTicker(e.target.value)}>
-              {TICKERS.map((t) => (
+              {tickers.map((t) => (
                 <MenuItem key={t} value={t}>
                   {t}
                 </MenuItem>

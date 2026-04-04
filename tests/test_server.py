@@ -26,7 +26,7 @@ class TestHealth:
         store.save("SPY", df, data_dir=tmp_path)
 
         with patch("market_data.server.store.list_tickers", return_value=["SPY"]):
-            with patch("market_data.config.DATA_DIR", tmp_path):
+            with patch("market_data.server.DATA_DIR", tmp_path):
                 resp = client.get("/ready")
 
         assert resp.status_code == 200

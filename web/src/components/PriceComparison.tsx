@@ -19,8 +19,9 @@ import Alert from "@mui/material/Alert";
 import CircularProgress from "@mui/material/CircularProgress";
 import { fetchCompare } from "@/lib/api";
 import type { CompareData } from "@/lib/types";
-import { TICKERS, TICKER_COLORS, type Ticker } from "@/lib/types";
+import { getTickerColor } from "@/lib/types";
 import { useThemeMode } from "./ThemeProvider";
+import useTickers from "@/lib/useTickers";
 
 const DAYS_OPTIONS = [30, 90, 180, 365] as const;
 type Days = (typeof DAYS_OPTIONS)[number];
@@ -49,13 +50,20 @@ export default function PriceComparison() {
   const chartRef = useRef<IChartApi | null>(null);
   const seriesMap = useRef<Map<string, ISeriesApi<"Line">>>(new Map());
 
+  const { tickers } = useTickers();
   const [days, setDays] = useState<Days>(90);
-  const [selected, setSelected] = useState<Set<Ticker>>(new Set(["QQQ", "XOM", "XLE"]));
+  const [selected, setSelected] = useState<Set<string>>(new Set());
   const [data, setData] = useState<CompareData>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const { mode } = useThemeMode();
+
+  useEffect(() => {
+    if (tickers.length > 0 && selected.size === 0) {
+      setSelected(new Set(tickers.slice(0, 3)));
+    }
+  }, [tickers, selected.size]);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -133,7 +141,7 @@ export default function PriceComparison() {
     }
 
     for (const [t, points] of Object.entries(data)) {
-      const color = TICKER_COLORS[t as Ticker] ?? "#3b89ff";
+      const color = getTickerColor(t, tickers);
       let series = seriesMap.current.get(t);
       if (!series) {
         series = chart.addSeries(LineSeries, { color, lineWidth: 2 });
@@ -153,9 +161,9 @@ export default function PriceComparison() {
     }
 
     chart.timeScale().fitContent();
-  }, [data]);
+  }, [data, tickers]);
 
-  function toggleTicker(t: Ticker) {
+  function toggleTicker(t: string) {
     setSelected((prev) => {
       const next = new Set(prev);
       if (next.has(t)) {
@@ -173,9 +181,9 @@ export default function PriceComparison() {
       <CardContent sx={{ p: 3 }}>
         <Box sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 2, mb: 3 }}>
           <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
-            {TICKERS.map((t) => {
+            {tickers.map((t) => {
               const active = selected.has(t);
-              const color = TICKER_COLORS[t];
+              const color = getTickerColor(t, tickers);
               return (
                 <Chip
                   key={t}

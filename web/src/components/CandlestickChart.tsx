@@ -24,9 +24,9 @@ import Alert from "@mui/material/Alert";
 import CircularProgress from "@mui/material/CircularProgress";
 import { fetchOHLCV } from "@/lib/api";
 import type { OHLCVBar } from "@/lib/types";
-import { TICKERS } from "@/lib/types";
 import { useThemeMode } from "./ThemeProvider";
 import ExportButton from "./ExportButton";
+import useTickers from "@/lib/useTickers";
 
 const DAYS_OPTIONS = [30, 90, 180, 365] as const;
 type Days = (typeof DAYS_OPTIONS)[number];
@@ -58,13 +58,18 @@ export default function CandlestickChart() {
   const candleRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
   const volumeRef = useRef<ISeriesApi<"Histogram"> | null>(null);
 
-  const [ticker, setTicker] = useState<string>("QQQ");
+  const { tickers } = useTickers();
+  const [ticker, setTicker] = useState<string>("");
   const [days, setDays] = useState<Days>(365);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<OHLCVBar[]>([]);
 
   const { mode } = useThemeMode();
+
+  useEffect(() => {
+    if (tickers.length > 0 && !ticker) setTicker(tickers[0]);
+  }, [tickers, ticker]);
 
   useEffect(() => {
     if (!containerRef.current || !volumeContainerRef.current) return;
@@ -146,6 +151,7 @@ export default function CandlestickChart() {
   }, [mode]);
 
   useEffect(() => {
+    if (!ticker) return;
     async function load() {
       setLoading(true);
       setError(null);
@@ -193,7 +199,7 @@ export default function CandlestickChart() {
           <FormControl size="small" sx={{ minWidth: 100 }}>
             <InputLabel>Ticker</InputLabel>
             <Select value={ticker} label="Ticker" onChange={(e) => setTicker(e.target.value)}>
-              {TICKERS.map((t) => (
+              {tickers.map((t) => (
                 <MenuItem key={t} value={t}>
                   {t}
                 </MenuItem>

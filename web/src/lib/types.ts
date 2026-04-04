@@ -61,17 +61,42 @@ export type SortDirection = "asc" | "desc";
 
 export type SortColumn = "date" | "open" | "high" | "low" | "close" | "volume";
 
-export const TICKERS = ["QQQ", "VIX", "USO", "XOM", "XLE", "CRM"] as const;
-export type Ticker = (typeof TICKERS)[number];
+const TICKER_PALETTE = [
+  "#00d4ff",
+  "#ff6b35",
+  "#ffd700",
+  "#00ff88",
+  "#ff4d8d",
+  "#a78bfa",
+  "#3b89ff",
+  "#36bb80",
+  "#ec4899",
+  "#fdbc2a",
+  "#6366f1",
+  "#14b8a6",
+  "#f97316",
+  "#06b6d4",
+  "#8b5cf6",
+  "#ef4444",
+  "#22c55e",
+  "#eab308",
+  "#0ea5e9",
+  "#d946ef",
+  "#64748b",
+  "#f43f5e",
+  "#84cc16",
+  "#a3e635",
+  "#fb923c",
+  "#38bdf8",
+  "#c084fc",
+  "#4ade80",
+  "#fbbf24",
+];
 
-export const TICKER_COLORS: Record<Ticker, string> = {
-  QQQ: "#00d4ff",
-  VIX: "#ff6b35",
-  USO: "#ffd700",
-  XOM: "#00ff88",
-  XLE: "#ff4d8d",
-  CRM: "#a78bfa",
-};
+export function getTickerColor(ticker: string, allTickers: string[]): string {
+  const idx = allTickers.indexOf(ticker);
+  return TICKER_PALETTE[idx >= 0 ? idx % TICKER_PALETTE.length : 0];
+}
 
 export type VixZone = "low" | "normal" | "elevated" | "extreme";
 

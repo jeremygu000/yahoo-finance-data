@@ -21,7 +21,7 @@ import Skeleton from "@mui/material/Skeleton";
 import Alert from "@mui/material/Alert";
 import { fetchOHLCV } from "@/lib/api";
 import type { OHLCVBar, SortColumn, SortDirection } from "@/lib/types";
-import { TICKERS } from "@/lib/types";
+import useTickers from "@/lib/useTickers";
 
 const PAGE_SIZE = 50;
 const SKELETON_KEYS = Array.from({ length: 10 }, (_, i) => `skeleton-${String(i)}`);
@@ -40,7 +40,8 @@ function formatVolume(n: number): string {
 }
 
 export default function DataTable() {
-  const [ticker, setTicker] = useState<string>("QQQ");
+  const { tickers } = useTickers();
+  const [ticker, setTicker] = useState<string>("");
   const [allData, setAllData] = useState<OHLCVBar[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -49,6 +50,11 @@ export default function DataTable() {
   const [page, setPage] = useState(0);
 
   useEffect(() => {
+    if (tickers.length > 0 && !ticker) setTicker(tickers[0]);
+  }, [tickers, ticker]);
+
+  useEffect(() => {
+    if (!ticker) return;
     async function load() {
       setLoading(true);
       setError(null);
@@ -108,7 +114,7 @@ export default function DataTable() {
           <FormControl size="small" sx={{ minWidth: 100 }}>
             <InputLabel>Ticker</InputLabel>
             <Select value={ticker} label="Ticker" onChange={(e) => setTicker(e.target.value)}>
-              {TICKERS.map((t) => (
+              {tickers.map((t) => (
                 <MenuItem key={t} value={t}>
                   {t}
                 </MenuItem>
