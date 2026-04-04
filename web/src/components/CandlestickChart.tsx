@@ -26,6 +26,7 @@ import { fetchOHLCV } from "@/lib/api";
 import type { OHLCVBar } from "@/lib/types";
 import { TICKERS } from "@/lib/types";
 import { useThemeMode } from "./ThemeProvider";
+import ExportButton from "./ExportButton";
 
 const DAYS_OPTIONS = [30, 90, 180, 365] as const;
 type Days = (typeof DAYS_OPTIONS)[number];
@@ -214,6 +215,8 @@ export default function CandlestickChart() {
               </ToggleButton>
             ))}
           </ToggleButtonGroup>
+
+          <ExportButton ticker={ticker} days={days} />
 
           {latest && (
             <Box sx={{ ml: "auto", display: "flex", gap: 3 }}>

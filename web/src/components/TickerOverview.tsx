@@ -161,11 +161,7 @@ function TickerCard({ card, displayClose, isLive, isUp, iconColor, mode }: Ticke
   }, [displayClose, prevClose]);
 
   const flashAnimation =
-    flashDir === "up"
-      ? "priceFlashUp 0.8s ease-out"
-      : flashDir === "down"
-        ? "priceFlashDown 0.8s ease-out"
-        : "none";
+    flashDir === "up" ? "priceFlashUp 0.8s ease-out" : flashDir === "down" ? "priceFlashDown 0.8s ease-out" : "none";
 
   return (
     <Grid size={{ xs: 12, sm: 6, lg: 4 }}>
@@ -343,9 +339,7 @@ function TickerCard({ card, displayClose, isLive, isUp, iconColor, mode }: Ticke
                 >
                   {stat.label}
                 </Typography>
-                <Typography
-                  sx={{ fontFamily: "var(--font-geist-mono)", fontSize: "0.75rem", color: "text.secondary" }}
-                >
+                <Typography sx={{ fontFamily: "var(--font-geist-mono)", fontSize: "0.75rem", color: "text.secondary" }}>
                   {stat.value}
                 </Typography>
               </Box>
@@ -363,9 +357,7 @@ function TickerCard({ card, displayClose, isLive, isUp, iconColor, mode }: Ticke
               >
                 Range
               </Typography>
-              <Typography
-                sx={{ fontFamily: "var(--font-geist-mono)", fontSize: "0.75rem", color: "text.secondary" }}
-              >
+              <Typography sx={{ fontFamily: "var(--font-geist-mono)", fontSize: "0.75rem", color: "text.secondary" }}>
                 {card.first_date} → {card.last_date}
               </Typography>
             </Box>
@@ -383,9 +375,7 @@ function TickerCard({ card, displayClose, isLive, isUp, iconColor, mode }: Ticke
                 >
                   Volume
                 </Typography>
-                <Typography
-                  sx={{ fontFamily: "var(--font-geist-mono)", fontSize: "0.75rem", color: "text.secondary" }}
-                >
+                <Typography sx={{ fontFamily: "var(--font-geist-mono)", fontSize: "0.75rem", color: "text.secondary" }}>
                   {formatVolume(card.latest.volume)}
                 </Typography>
               </Box>

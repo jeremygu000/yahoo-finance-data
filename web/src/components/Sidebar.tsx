@@ -15,10 +15,13 @@ import CandlestickChartIcon from "@mui/icons-material/CandlestickChart";
 import CompareArrowsIcon from "@mui/icons-material/CompareArrows";
 import TableChartIcon from "@mui/icons-material/TableChart";
 import SpeedIcon from "@mui/icons-material/Speed";
+import TimelineIcon from "@mui/icons-material/Timeline";
+import AccountBalanceWalletIcon from "@mui/icons-material/AccountBalanceWallet";
 import LightModeIcon from "@mui/icons-material/LightMode";
 import DarkModeIcon from "@mui/icons-material/DarkMode";
 import { useThemeMode } from "./ThemeProvider";
 import { useLivePrices } from "./PriceProvider";
+import TickerSearch from "./TickerSearch";
 
 const DRAWER_WIDTH = 240;
 
@@ -28,6 +31,7 @@ const NAV_ITEMS = [
   { id: "comparison", label: "Comparison", Icon: CompareArrowsIcon },
   { id: "table", label: "Data Table", Icon: TableChartIcon },
   { id: "vix", label: "VIX", Icon: SpeedIcon },
+  { id: "indicators", label: "Indicators", Icon: TimelineIcon },
 ] as const;
 
 type SectionId = (typeof NAV_ITEMS)[number]["id"];
@@ -183,6 +187,46 @@ export default function Sidebar() {
           );
         })}
       </List>
+
+      <Box sx={{ px: 1.5, pb: 1.5 }}>
+        <TickerSearch
+          onSelect={() => {
+            const el = document.getElementById("overview");
+            if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+          }}
+        />
+      </Box>
+
+      <Divider sx={{ borderColor: "rgba(255,255,255,0.08)" }} />
+
+      <Box sx={{ px: 1.5, py: 1 }}>
+        <ListItemButton
+          component="a"
+          href="/portfolio"
+          sx={{
+            borderRadius: "8px",
+            px: 1.5,
+            py: 1,
+            color: "rgba(255,255,255,0.55)",
+            "&:hover": {
+              bgcolor: "rgba(255,255,255,0.06) !important",
+              color: "rgba(255,255,255,0.85)",
+            },
+          }}
+        >
+          <ListItemIcon sx={{ minWidth: 36, color: "rgba(255,255,255,0.4)" }}>
+            <AccountBalanceWalletIcon sx={{ fontSize: "1.1rem" }} />
+          </ListItemIcon>
+          <ListItemText
+            primary="Portfolio"
+            primaryTypographyProps={{
+              fontSize: "0.875rem",
+              fontWeight: 400,
+              color: "inherit",
+            }}
+          />
+        </ListItemButton>
+      </Box>
 
       <Divider sx={{ borderColor: "rgba(255,255,255,0.08)" }} />
 

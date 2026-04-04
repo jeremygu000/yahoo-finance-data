@@ -24,9 +24,5 @@ export function useLivePrices(): PriceContextValue {
 export default function PriceProvider({ children }: { children: React.ReactNode }) {
   const { prices, alerts, status } = usePriceWebSocket();
 
-  return (
-    <PriceContext.Provider value={{ prices, alerts, wsStatus: status }}>
-      {children}
-    </PriceContext.Provider>
-  );
+  return <PriceContext.Provider value={{ prices, alerts, wsStatus: status }}>{children}</PriceContext.Provider>;
 }

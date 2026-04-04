@@ -67,9 +67,7 @@ export default function AlertToast() {
           >
             🔔 ALERT: {currentAlert.ticker}
           </Typography>
-          <Typography sx={{ fontFamily: "inherit", fontSize: "0.75rem" }}>
-            {currentAlert.message}
-          </Typography>
+          <Typography sx={{ fontFamily: "inherit", fontSize: "0.75rem" }}>{currentAlert.message}</Typography>
           <Box sx={{ display: "flex", gap: 2, mt: 0.5 }}>
             <Box>
               <Typography sx={{ fontFamily: "inherit", fontSize: "0.65rem", opacity: 0.8, textTransform: "uppercase" }}>
