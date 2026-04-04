@@ -89,6 +89,8 @@ export default function AISummary() {
 
   const [chatSessionId, setChatSessionId] = useState<string | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const chatMsgIdRef = useRef(0);
+  const nextChatMsgId = () => `chat-${++chatMsgIdRef.current}`;
   const [chatInput, setChatInput] = useState("");
   const [chatStreaming, setChatStreaming] = useState(false);
   const [chatStreamedText, setChatStreamedText] = useState("");
@@ -151,6 +153,7 @@ export default function AISummary() {
     setGenerating(true);
     abortRef.current = false;
     setChatMessages([]);
+    chatMsgIdRef.current = 0;
     setChatSessionId(null);
     setChatStreamedText("");
 
@@ -195,7 +198,7 @@ export default function AISummary() {
     const message = chatInput.trim();
     if (!message || chatStreaming || generating) return;
 
-    setChatMessages((prev) => [...prev, { role: "user", content: message }]);
+    setChatMessages((prev) => [...prev, { id: nextChatMsgId(), role: "user", content: message }]);
     setChatInput("");
     setChatStreaming(true);
     setChatStreamedText("");
@@ -211,7 +214,7 @@ export default function AISummary() {
         },
         () => {
           const finalText = chatStreamedRef.current;
-          setChatMessages((prev) => [...prev, { role: "assistant" as const, content: finalText }]);
+          setChatMessages((prev) => [...prev, { id: nextChatMsgId(), role: "assistant" as const, content: finalText }]);
           setChatStreamedText("");
           chatStreamedRef.current = "";
           setChatStreaming(false);
@@ -220,7 +223,7 @@ export default function AISummary() {
     } catch (err) {
       setChatMessages((prev) => [
         ...prev,
-        { role: "assistant", content: `Error: ${err instanceof Error ? err.message : "Failed to get response"}` },
+        { id: nextChatMsgId(), role: "assistant", content: `Error: ${err instanceof Error ? err.message : "Failed to get response"}` },
       ]);
       setChatStreamedText("");
       chatStreamedRef.current = "";
@@ -967,11 +970,11 @@ export default function AISummary() {
 
       {hasOutput && chatMessages.length > 0 && (
         <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
-          {chatMessages.map((msg, idx) => {
+          {chatMessages.map((msg) => {
             if (msg.role === "user") {
               return (
                 <Box
-                  key={idx}
+                  key={msg.id}
                   sx={{
                     display: "flex",
                     justifyContent: "flex-end",
@@ -1005,7 +1008,7 @@ export default function AISummary() {
             const msgHasThinking = msgThinking.length > 0;
             return (
               <Paper
-                key={idx}
+                key={msg.id}
                 elevation={0}
                 sx={{
                   bgcolor: "background.paper",

@@ -72,6 +72,7 @@ def get_session(session_id: str) -> _ChatSession | None:
         return None
     return session
 
+
 SYSTEM_PROMPT = (
     "You are a senior financial analyst. "
     "Analyze the provided market data and give a concise, actionable summary. "

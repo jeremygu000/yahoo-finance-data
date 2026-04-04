@@ -151,14 +151,16 @@ def batch_status_paginated(
         ticker, interval = _parse_ticker_from_filename(filename)
         if search and search.upper() not in ticker.upper():
             continue
-        entries.append((
-            ticker,
-            interval,
-            filename,
-            rows,
-            pd.Timestamp(first_dt).date().isoformat(),
-            pd.Timestamp(last_dt).date().isoformat(),
-        ))
+        entries.append(
+            (
+                ticker,
+                interval,
+                filename,
+                rows,
+                pd.Timestamp(first_dt).date().isoformat(),
+                pd.Timestamp(last_dt).date().isoformat(),
+            )
+        )
 
     total = len(entries)
     total_pages = max(1, (total + page_size - 1) // page_size)

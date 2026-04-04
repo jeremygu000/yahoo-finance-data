@@ -28,7 +28,15 @@ from market_data import ai_summary as ai_mod
 from market_data import indicators as indicators_mod
 from market_data import notifications as notif_mod
 from market_data import portfolio as portfolio_mod
-from market_data.config import API_KEY, CORS_ORIGINS, DATA_DIR, DEFAULT_INTERVAL, VALID_INTERVALS, WS_POLL_INTERVAL
+from market_data.config import (
+    API_KEY,
+    CORS_ORIGINS,
+    DATA_DIR,
+    DEFAULT_INTERVAL,
+    LOG_DIR,
+    VALID_INTERVALS,
+    WS_POLL_INTERVAL,
+)
 from market_data.exceptions import (
     InvalidTickerError,
     MarketDataError,
@@ -92,7 +100,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     global _price_task
     from market_data.logging_config import setup_logging
 
-    setup_logging()
+    setup_logging(log_dir=LOG_DIR)
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     logger.info("server starting", extra={"path": str(DATA_DIR)})
     _price_task = asyncio.create_task(_poll_prices())
@@ -442,9 +450,7 @@ async def get_compare(
     ticker_list = [t.strip() for t in tickers.split(",") if t.strip()]
     if not ticker_list:
         return {}
-    frames = await asyncio.to_thread(
-        duckdb_reader.compare_close, ticker_list, days, DATA_DIR, interval
-    )
+    frames = await asyncio.to_thread(duckdb_reader.compare_close, ticker_list, days, DATA_DIR, interval)
     result: dict[str, list[ClosePoint]] = {}
     for t, df in frames.items():
         result[t] = _close_records(df)

@@ -168,9 +168,7 @@ class TestBatchLoad:
         df = sample_ohlcv(days=10)
         store.save("AAPL", df, data_dir=tmp_path)
 
-        result = duckdb_reader.batch_load(
-            ["AAPL"], data_dir=tmp_path, columns=["Date", "Close"]
-        )
+        result = duckdb_reader.batch_load(["AAPL"], data_dir=tmp_path, columns=["Date", "Close"])
         loaded = result["AAPL"]
         assert list(loaded.columns) == ["Close"]
         assert len(loaded) == 10
@@ -192,9 +190,7 @@ class TestCompareClose:
         store.save("AAPL", df, data_dir=tmp_path)
         store.save("GOOG", df, data_dir=tmp_path)
 
-        result = duckdb_reader.compare_close(
-            ["AAPL", "GOOG"], days=30, data_dir=tmp_path
-        )
+        result = duckdb_reader.compare_close(["AAPL", "GOOG"], days=30, data_dir=tmp_path)
         assert set(result.keys()) == {"AAPL", "GOOG"}
         for ticker_df in result.values():
             assert list(ticker_df.columns) == ["Close"]

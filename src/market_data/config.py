@@ -58,6 +58,7 @@ VALID_INTERVALS: list[str] = ["1d", "1h", "15m", "5m"]
 DEFAULT_INTERVAL = "1d"
 MAX_RETRIES = int(os.environ.get("MARKET_DATA_MAX_RETRIES", "3"))
 RETRY_DELAY_RANGE = (1.0, 3.0)
+FETCH_CONCURRENCY = int(os.environ.get("MARKET_DATA_FETCH_CONCURRENCY", "4"))
 
 _default_cors = "http://localhost:3000,http://127.0.0.1:3000"
 CORS_ORIGINS: list[str] = [

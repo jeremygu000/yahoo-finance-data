@@ -1,26 +1,15 @@
-"""Structured JSON logging configuration.
-
-Two modes:
-- JSON (default for server): machine-parseable, one JSON object per line
-- Human (CLI): traditional %(asctime)s [%(levelname)s] format
-
-Usage:
-    from market_data.logging_config import setup_logging
-    setup_logging()           # JSON mode (default)
-    setup_logging(json=False) # Human-readable mode
-"""
-
 from __future__ import annotations
 
 import json
 import logging
 import sys
 import time
+from logging.handlers import RotatingFileHandler
+from pathlib import Path
 from typing import Any
 
 
 class JSONFormatter(logging.Formatter):
-    """Formats log records as single-line JSON objects."""
 
     def format(self, record: logging.LogRecord) -> str:
         log_entry: dict[str, Any] = {
@@ -33,7 +22,6 @@ class JSONFormatter(logging.Formatter):
         if record.exc_info and record.exc_info[0] is not None:
             log_entry["exception"] = self.formatException(record.exc_info)
 
-        # Merge extra structured fields (set via logger.info("msg", extra={...}))
         for key in (
             "request_id",
             "method",
@@ -58,26 +46,39 @@ class JSONFormatter(logging.Formatter):
 HUMAN_FORMAT = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
 HUMAN_DATEFMT = "%Y-%m-%d %H:%M:%S"
 
+# 10 MB per file, keep 5 rotated files = 60 MB max
+_LOG_MAX_BYTES = 10 * 1024 * 1024
+_LOG_BACKUP_COUNT = 5
 
-def setup_logging(*, json_format: bool = True, level: int = logging.INFO) -> None:
-    """Configure root logger with JSON or human-readable format.
 
-    Call once at application startup (server lifespan or CLI main).
-    """
+def setup_logging(
+    *,
+    json_format: bool = True,
+    level: int = logging.INFO,
+    log_dir: Path | None = None,
+) -> None:
     root = logging.getLogger()
-
-    # Clear existing handlers to avoid duplicate output
     root.handlers.clear()
 
-    handler = logging.StreamHandler(sys.stderr)
+    stderr_handler = logging.StreamHandler(sys.stderr)
     if json_format:
-        handler.setFormatter(JSONFormatter())
+        stderr_handler.setFormatter(JSONFormatter())
     else:
-        handler.setFormatter(logging.Formatter(HUMAN_FORMAT, datefmt=HUMAN_DATEFMT))
+        stderr_handler.setFormatter(logging.Formatter(HUMAN_FORMAT, datefmt=HUMAN_DATEFMT))
+    root.addHandler(stderr_handler)
 
-    root.addHandler(handler)
+    if log_dir is not None:
+        log_dir.mkdir(parents=True, exist_ok=True)
+        file_handler = RotatingFileHandler(
+            log_dir / "market_data.log",
+            maxBytes=_LOG_MAX_BYTES,
+            backupCount=_LOG_BACKUP_COUNT,
+            encoding="utf-8",
+        )
+        file_handler.setFormatter(JSONFormatter())
+        root.addHandler(file_handler)
+
     root.setLevel(level)
 
-    # Quiet noisy third-party loggers
     logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
     logging.getLogger("yfinance").setLevel(logging.WARNING)

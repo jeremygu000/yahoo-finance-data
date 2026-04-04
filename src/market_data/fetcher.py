@@ -3,11 +3,12 @@ from __future__ import annotations
 import logging
 import random
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, timedelta
 
 import pandas as pd
 
-from market_data.config import BATCH_SIZE, MAX_RETRIES, RETRY_DELAY_RANGE
+from market_data.config import BATCH_SIZE, FETCH_CONCURRENCY, MAX_RETRIES, RETRY_DELAY_RANGE
 from market_data.providers import get_fallback_chain
 from market_data.providers.base import MarketDataProvider
 
@@ -108,15 +109,37 @@ def fetch_batch(
     chunks = _chunked(tickers, BATCH_SIZE)
     result: dict[str, pd.DataFrame] = {}
 
-    for i, chunk in enumerate(chunks):
-        if i > 0:
-            delay = random.uniform(*RETRY_DELAY_RANGE)
-            logger.info("Chunk %d/%d: sleeping %.1fs before next batch", i + 1, len(chunks), delay)
-            time.sleep(delay)
-
-        logger.info("Chunk %d/%d: fetching %d tickers", i + 1, len(chunks), len(chunk))
-        chunk_result = _fetch_chunk(chunk, start, end, interval, eligible)
+    max_workers = min(FETCH_CONCURRENCY, len(chunks))
+    if max_workers <= 1:
+        # Single chunk — no thread overhead needed
+        logger.info("Fetching %d tickers in 1 chunk", len(tickers))
+        chunk_result = _fetch_chunk(chunks[0], start, end, interval, eligible)
         result.update(chunk_result)
+    else:
+        logger.info(
+            "Fetching %d tickers in %d chunks (concurrency=%d)",
+            len(tickers),
+            len(chunks),
+            max_workers,
+        )
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            future_to_idx = {
+                executor.submit(_fetch_chunk, chunk, start, end, interval, eligible): i
+                for i, chunk in enumerate(chunks)
+            }
+            for future in as_completed(future_to_idx):
+                idx = future_to_idx[future]
+                try:
+                    chunk_result = future.result()
+                    result.update(chunk_result)
+                    logger.info(
+                        "Chunk %d/%d complete: %d tickers fetched",
+                        idx + 1,
+                        len(chunks),
+                        len(chunk_result),
+                    )
+                except Exception:
+                    logger.exception("Chunk %d/%d failed", idx + 1, len(chunks))
 
     fetched = len(result)
     missing = [t for t in tickers if t not in result]
