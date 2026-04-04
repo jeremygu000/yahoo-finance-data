@@ -94,7 +94,7 @@ jobs:
         run: uv sync --frozen
 
       - name: Python dependency audit (pip-audit)
-        run: uv run pip-audit --require-hashes --disable-pip --strict -r <(uv export --frozen --no-dev)
+        run: uv run pip-audit --require-hashes --disable-pip --strict -r <(uv export --frozen --no-dev --no-emit-project)
         shell: bash
 
       - name: Install pnpm

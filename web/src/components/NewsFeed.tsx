@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Box from "@mui/material/Box";
+import ButtonBase from "@mui/material/ButtonBase";
 import Card from "@mui/material/Card";
 import CardContent from "@mui/material/CardContent";
 import Typography from "@mui/material/Typography";
@@ -79,16 +80,8 @@ function ArticleCard({ article, onClick }: ArticleCardProps) {
       : null;
 
   return (
-    <Box
-      role="button"
-      tabIndex={0}
+    <ButtonBase
       onClick={onClick}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          onClick();
-        }
-      }}
       sx={{
         display: "flex",
         gap: 1.5,
@@ -100,6 +93,8 @@ function ArticleCard({ article, onClick }: ArticleCardProps) {
         textDecoration: "none",
         color: "inherit",
         cursor: "pointer",
+        textAlign: "left",
+        width: "100%",
         transition: "background-color 0.15s ease, border-color 0.15s ease",
         "&:hover": {
           bgcolor: "rgba(255,255,255,0.05)",
@@ -209,7 +204,7 @@ function ArticleCard({ article, onClick }: ArticleCardProps) {
           </Box>
         )}
       </Box>
-    </Box>
+    </ButtonBase>
   );
 }
 
@@ -492,9 +487,9 @@ export default function NewsFeed() {
             </Box>
           ) : data && data.articles.length > 0 ? (
             <Box sx={{ display: "flex", flexDirection: "column", gap: 1.25 }}>
-              {data.articles.map((article, idx) => (
+              {data.articles.map((article) => (
                 <ArticleCard
-                  key={article.uuid ?? `news-${String(idx)}`}
+                  key={article.uuid ?? article.link ?? article.title ?? ""}
                   article={article}
                   onClick={() => handleOpenArticle(article)}
                 />
