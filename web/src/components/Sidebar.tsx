@@ -18,6 +18,7 @@ import SpeedIcon from "@mui/icons-material/Speed";
 import TimelineIcon from "@mui/icons-material/Timeline";
 import NotificationsIcon from "@mui/icons-material/Notifications";
 import AccountBalanceWalletIcon from "@mui/icons-material/AccountBalanceWallet";
+import StorageIcon from "@mui/icons-material/Storage";
 import LightModeIcon from "@mui/icons-material/LightMode";
 import DarkModeIcon from "@mui/icons-material/DarkMode";
 import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
@@ -227,6 +228,33 @@ export default function Sidebar() {
           </ListItemIcon>
           <ListItemText
             primary="Portfolio"
+            primaryTypographyProps={{
+              fontSize: "0.875rem",
+              fontWeight: 400,
+              color: "inherit",
+            }}
+          />
+        </ListItemButton>
+
+        <ListItemButton
+          component="a"
+          href="/data-management"
+          sx={{
+            borderRadius: "8px",
+            px: 1.5,
+            py: 1,
+            color: "rgba(255,255,255,0.55)",
+            "&:hover": {
+              bgcolor: "rgba(255,255,255,0.06) !important",
+              color: "rgba(255,255,255,0.85)",
+            },
+          }}
+        >
+          <ListItemIcon sx={{ minWidth: 36, color: "rgba(255,255,255,0.4)" }}>
+            <StorageIcon sx={{ fontSize: "1.1rem" }} />
+          </ListItemIcon>
+          <ListItemText
+            primary="Data Management"
             primaryTypographyProps={{
               fontSize: "0.875rem",
               fontWeight: 400,

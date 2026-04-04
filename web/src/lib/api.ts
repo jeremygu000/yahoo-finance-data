@@ -20,6 +20,11 @@ import type {
   HeatmapItem,
   FundamentalsResponse,
   NewsResponse,
+  StorageSummary,
+  CleanRequest,
+  CleanResponse,
+  DeleteTickerResponse,
+  QualityReportResponse,
 } from "./types";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8100";
@@ -174,6 +179,33 @@ export async function testAlertNotification(alertId: string): Promise<{ status: 
   const res = await fetch(`${BASE_URL}/api/v1/alerts/test/${alertId}`, { method: "POST", headers: authHeaders() });
   if (!res.ok) throw new Error(`API error ${res.status}: POST /api/v1/alerts/test/${alertId}`);
   return res.json() as Promise<{ status: string; results?: Record<string, boolean> }>;
+}
+
+export async function fetchStorageSummary(): Promise<StorageSummary> {
+  return fetcher<StorageSummary>("/api/v1/data/storage");
+}
+
+export async function fetchDataQuality(staleDays = 3): Promise<QualityReportResponse> {
+  return fetcher<QualityReportResponse>(`/api/v1/data/quality?stale_days=${staleDays}`);
+}
+
+export async function cleanData(req: CleanRequest): Promise<CleanResponse> {
+  const res = await fetch(`${BASE_URL}/api/v1/data/clean`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify(req),
+  });
+  if (!res.ok) throw new Error(`API error ${res.status}: POST /api/v1/data/clean`);
+  return res.json() as Promise<CleanResponse>;
+}
+
+export async function deleteTickerData(ticker: string): Promise<DeleteTickerResponse> {
+  const res = await fetch(`${BASE_URL}/api/v1/data/${encodeURIComponent(ticker)}`, {
+    method: "DELETE",
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error(`API error ${res.status}: DELETE /api/v1/data/${ticker}`);
+  return res.json() as Promise<DeleteTickerResponse>;
 }
 
 export async function fetchAiHealth(): Promise<{ available: boolean }> {

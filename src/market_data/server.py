@@ -30,6 +30,7 @@ from market_data import news as news_mod
 from market_data import indicators as indicators_mod
 from market_data import notifications as notif_mod
 from market_data import portfolio as portfolio_mod
+from market_data import quality as quality_mod
 from market_data.config import (
     API_KEY,
     CORS_ORIGINS,
@@ -50,8 +51,12 @@ from market_data.schemas import (
     AlertListResponse,
     AlertResponse,
     AlertTriggered,
+    AnomalyItem,
     ChatRequest,
+    CleanRequest,
+    CleanResponse,
     ClosePoint,
+    DeleteTickerResponse,
     ErrorResponse,
     FundamentalsResponse,
     HealthResponse,
@@ -67,12 +72,15 @@ from market_data.schemas import (
     PortfolioSummaryResponse,
     PortfolioUpdateRequest,
     PriceUpdate,
+    QualityReportResponse,
     ReadyResponse,
     SearchResponse,
     SearchResult,
+    StorageSummary,
     SummaryRequest,
     SummaryResponse,
     TickerOverviewResponse,
+    TickerQualityItem,
     TickerStatus,
     WatchlistAddRequest,
     WatchlistResponse,
@@ -926,6 +934,62 @@ async def get_news(ticker: str, count: int = Query(10, ge=1, le=30)) -> NewsResp
     )
 
 
+@v1.get("/data/storage", response_model=StorageSummary)
+async def get_storage_summary() -> dict[str, object]:
+    return await asyncio.to_thread(store.storage_summary)
+
+
+@v1.get("/data/quality", response_model=QualityReportResponse)
+async def get_data_quality(
+    stale_days: int = Query(default=3, ge=1, le=365),
+) -> QualityReportResponse:
+    report = await asyncio.to_thread(quality_mod.generate_report, stale_days)
+    return QualityReportResponse(
+        scan_date=report.scan_date,
+        total_files=report.total_files,
+        total_rows=report.total_rows,
+        tickers=[
+            TickerQualityItem(
+                ticker=tq.ticker,
+                interval=tq.interval,
+                rows=tq.rows,
+                first_date=tq.first_date,
+                last_date=tq.last_date,
+                days_stale=tq.days_stale,
+                completeness_pct=tq.completeness_pct,
+                nan_pct=tq.nan_pct,
+                anomalies=[
+                    AnomalyItem(ticker=a.ticker, issue=a.issue, count=a.count, detail=a.detail) for a in tq.anomalies
+                ],
+                outliers=tq.outliers,
+            )
+            for tq in report.tickers
+        ],
+        anomalies=[
+            AnomalyItem(ticker=a.ticker, issue=a.issue, count=a.count, detail=a.detail) for a in report.anomalies
+        ],
+    )
+
+
+@v1.post("/data/clean", response_model=CleanResponse)
+async def clean_data(body: CleanRequest) -> CleanResponse:
+    removed = await asyncio.to_thread(store.clean, body.keep_days)
+    total = sum(removed.values())
+    return CleanResponse(removed=removed, total_removed=total)
+
+
+@v1.delete("/data/{ticker}", response_model=DeleteTickerResponse)
+async def delete_ticker_data(ticker: str) -> DeleteTickerResponse:
+    safe = store.validate_ticker(ticker)
+    files_removed = await asyncio.to_thread(store.delete_ticker, ticker)
+    if files_removed == 0:
+        return JSONResponse(  # type: ignore[return-value]
+            status_code=404,
+            content={"error": f"No data found for ticker {safe!r}"},
+        )
+    return DeleteTickerResponse(ticker=safe, files_removed=files_removed)
+
+
 @v1.get("/ai/health")
 async def ai_health() -> dict[str, bool]:
     ok = await ai_mod.health_check()
@@ -1014,4 +1078,8 @@ legacy.add_api_route("/ai/health", ai_health, methods=["GET"])
 legacy.add_api_route("/ai/summary", ai_summary, methods=["POST"])
 legacy.add_api_route("/ai/summary/stream", ai_summary_stream, methods=["POST"])
 legacy.add_api_route("/ai/chat", ai_chat, methods=["POST"])
+legacy.add_api_route("/data/storage", get_storage_summary, methods=["GET"])
+legacy.add_api_route("/data/quality", get_data_quality, methods=["GET"])
+legacy.add_api_route("/data/clean", clean_data, methods=["POST"])
+legacy.add_api_route("/data/{ticker}", delete_ticker_data, methods=["DELETE"])
 app.include_router(legacy)

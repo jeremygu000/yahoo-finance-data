@@ -301,6 +301,59 @@ export interface NewsResponse {
   articles: NewsArticle[];
 }
 
+// --- Data Management Types ---
+
+export interface StorageSummary {
+  total_files: number;
+  total_size_kb: number;
+  total_rows: number;
+  ticker_count: number;
+  oldest_date: string | null;
+  newest_date: string | null;
+}
+
+export interface CleanRequest {
+  keep_days: number;
+}
+
+export interface CleanResponse {
+  removed: Record<string, string[]>;
+  total_removed: number;
+}
+
+export interface DeleteTickerResponse {
+  ticker: string;
+  files_removed: number;
+}
+
+export interface AnomalyItem {
+  ticker: string;
+  issue: string;
+  count: number;
+  detail: string;
+}
+
+export interface TickerQualityItem {
+  ticker: string;
+  interval: string;
+  rows: number;
+  first_date: string;
+  last_date: string;
+  days_stale: number;
+  completeness_pct: number;
+  nan_pct: number;
+  anomalies: number;
+  outliers: number;
+}
+
+export interface QualityReportResponse {
+  scan_date: string;
+  total_files: number;
+  total_rows: number;
+  tickers: TickerQualityItem[];
+  anomalies: AnomalyItem[];
+}
+
 export const INDICATOR_COLORS: Record<string, string> = {
   SMA: "#3b89ff",
   EMA: "#ff6b35",

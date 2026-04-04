@@ -175,3 +175,54 @@ def clean(keep_days: int = 365, data_dir: Path = DATA_DIR) -> dict[str, int]:
             df.to_parquet(path, engine="pyarrow")
 
     return removed
+
+
+def delete_ticker(ticker: str, data_dir: Path = DATA_DIR) -> int:
+    """Delete all Parquet files for a ticker. Returns number of files removed."""
+    safe = validate_ticker(ticker)
+    removed = 0
+    for path in sorted(data_dir.glob(f"{safe}*.parquet")):
+        stem = path.stem
+        parts = stem.rsplit("_", 1)
+        if len(parts) == 2 and parts[0] == safe and parts[1] in VALID_INTERVALS:
+            path.unlink()
+            removed += 1
+        elif stem == safe:
+            path.unlink()
+            removed += 1
+    invalidate_cache(ticker)
+    logger.info("%s: deleted %d file(s)", safe, removed)
+    return removed
+
+
+def storage_summary(data_dir: Path = DATA_DIR) -> dict[str, object]:
+    """Return aggregate storage statistics."""
+    if not data_dir.exists():
+        return {
+            "total_files": 0,
+            "total_size_kb": 0.0,
+            "total_rows": 0,
+            "ticker_count": 0,
+            "oldest_date": None,
+            "newest_date": None,
+        }
+
+    items = status(data_dir)
+    total_files = len(items)
+    total_size_kb = sum(float(str(it.get("size_kb", 0))) for it in items)
+    total_rows = sum(int(str(it.get("rows", 0))) for it in items)
+    tickers: set[str] = {str(it["ticker"]) for it in items}
+
+    first_dates = [str(it["first_date"]) for it in items if it.get("first_date")]
+    last_dates = [str(it["last_date"]) for it in items if it.get("last_date")]
+    oldest = min(first_dates) if first_dates else None
+    newest = max(last_dates) if last_dates else None
+
+    return {
+        "total_files": total_files,
+        "total_size_kb": round(total_size_kb, 2),
+        "total_rows": total_rows,
+        "ticker_count": len(tickers),
+        "oldest_date": oldest,
+        "newest_date": newest,
+    }

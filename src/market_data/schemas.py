@@ -261,3 +261,57 @@ class NewsResponse(BaseModel):
     ticker: str
     count: int
     articles: list[NewsArticle]
+
+
+# --- Data Management ---
+
+
+class StorageSummary(BaseModel):
+    total_files: int
+    total_size_kb: float
+    total_rows: int
+    ticker_count: int
+    oldest_date: str | None = None
+    newest_date: str | None = None
+
+
+class CleanRequest(BaseModel):
+    keep_days: int = 365
+
+
+class CleanResponse(BaseModel):
+    removed: dict[str, int]
+    total_removed: int
+
+
+class DeleteTickerResponse(BaseModel):
+    ticker: str
+    files_removed: int
+
+
+class AnomalyItem(BaseModel):
+    ticker: str
+    issue: str
+    count: int
+    detail: str = ""
+
+
+class TickerQualityItem(BaseModel):
+    ticker: str
+    interval: str
+    rows: int
+    first_date: str
+    last_date: str
+    days_stale: int
+    completeness_pct: float
+    nan_pct: float
+    anomalies: list[AnomalyItem] = []
+    outliers: int = 0
+
+
+class QualityReportResponse(BaseModel):
+    scan_date: str
+    total_files: int
+    total_rows: int
+    tickers: list[TickerQualityItem] = []
+    anomalies: list[AnomalyItem] = []
