@@ -80,6 +80,7 @@ async def generate(
         "prompt": prompt,
         "system": system,
         "stream": False,
+        "think": True,
         "keep_alive": "5m",
         "options": {"temperature": 0.3, "num_predict": 2048},
     }
@@ -89,8 +90,13 @@ async def generate(
             resp = await client.post("/api/generate", json=payload)
             resp.raise_for_status()
             data: dict[str, Any] = resp.json()
+            thinking = data.get("thinking", "")
+            response = data.get("response", "")
+            # Wrap thinking in <think> tags so frontend parseThinkTags works
+            if thinking:
+                response = f"<think>{thinking}</think>{response}"
             return {
-                "response": data.get("response", ""),
+                "response": response,
                 "model": data.get("model", model),
                 "total_duration_ms": data.get("total_duration", 0) // 1_000_000,
                 "eval_count": data.get("eval_count", 0),
@@ -108,6 +114,7 @@ async def generate_stream(
         "prompt": prompt,
         "system": system,
         "stream": True,
+        "think": True,
         "keep_alive": "5m",
         "options": {"temperature": 0.3, "num_predict": 2048},
     }
@@ -116,16 +123,31 @@ async def generate_stream(
         async with httpx.AsyncClient(base_url=OLLAMA_HOST, timeout=timeout) as client:
             async with client.stream("POST", "/api/generate", json=payload) as resp:
                 resp.raise_for_status()
+                in_thinking = False
                 async for line in resp.aiter_lines():
                     if not line.strip():
                         continue
                     import json
 
                     chunk: dict[str, Any] = json.loads(line)
-                    token = chunk.get("response", "")
-                    if token:
-                        yield token
+                    thinking_token = chunk.get("thinking", "")
+                    response_token = chunk.get("response", "")
+
+                    if thinking_token:
+                        if not in_thinking:
+                            yield "<think>"
+                            in_thinking = True
+                        yield thinking_token
+                    elif in_thinking and response_token:
+                        yield "</think>"
+                        in_thinking = False
+                        yield response_token
+                    elif response_token:
+                        yield response_token
+
                     if chunk.get("done", False):
+                        if in_thinking:
+                            yield "</think>"
                         return
 
 

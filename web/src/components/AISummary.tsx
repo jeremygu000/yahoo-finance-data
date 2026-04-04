@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import Button from "@mui/material/Button";
@@ -17,6 +17,8 @@ import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
 import WifiOffIcon from "@mui/icons-material/WifiOff";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 import { fetchAiHealth, fetchAiSummary, streamAiSummary } from "@/lib/api";
 import type { SummaryResponse } from "@/lib/types";
@@ -605,38 +607,272 @@ export default function AISummary() {
 
           {(responseText.length > 0 || (!hasThinking && hasOutput)) && (
             <Box sx={{ px: 2.5, py: 2.5 }}>
-              <Typography
-                component="pre"
-                sx={{
-                  fontFamily: "var(--font-geist-mono)",
-                  fontSize: "0.825rem",
-                  lineHeight: 1.75,
-                  color: "text.primary",
-                  whiteSpace: "pre-wrap",
-                  wordBreak: "break-word",
-                  m: 0,
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                components={{
+                  h1: ({ children }) => (
+                    <Typography
+                      variant="h5"
+                      sx={{
+                        fontFamily: "var(--font-geist-sans)",
+                        fontWeight: 700,
+                        fontSize: "1.15rem",
+                        mb: 1,
+                        mt: 1.5,
+                        color: "text.primary",
+                      }}
+                    >
+                      {children}
+                    </Typography>
+                  ),
+                  h2: ({ children }) => (
+                    <Typography
+                      variant="h6"
+                      sx={{
+                        fontFamily: "var(--font-geist-sans)",
+                        fontWeight: 600,
+                        fontSize: "1rem",
+                        mb: 0.75,
+                        mt: 1.5,
+                        color: "text.primary",
+                      }}
+                    >
+                      {children}
+                    </Typography>
+                  ),
+                  h3: ({ children }) => (
+                    <Typography
+                      variant="subtitle1"
+                      sx={{
+                        fontFamily: "var(--font-geist-sans)",
+                        fontWeight: 600,
+                        fontSize: "0.9rem",
+                        mb: 0.5,
+                        mt: 1.25,
+                        color: "text.primary",
+                      }}
+                    >
+                      {children}
+                    </Typography>
+                  ),
+                  p: ({ children }) => (
+                    <Typography
+                      component="p"
+                      sx={{
+                        fontFamily: "var(--font-geist-sans)",
+                        fontSize: "0.825rem",
+                        lineHeight: 1.75,
+                        color: "text.primary",
+                        mb: 1,
+                        mt: 0,
+                      }}
+                    >
+                      {children}
+                    </Typography>
+                  ),
+                  strong: ({ children }) => (
+                    <Box component="span" sx={{ fontWeight: 700 }}>
+                      {children}
+                    </Box>
+                  ),
+                  em: ({ children }) => (
+                    <Box component="span" sx={{ fontStyle: "italic" }}>
+                      {children}
+                    </Box>
+                  ),
+                  ul: ({ children }) => (
+                    <Box
+                      component="ul"
+                      sx={{
+                        pl: 2.5,
+                        mb: 1,
+                        mt: 0,
+                        "& li": { mb: 0.25 },
+                      }}
+                    >
+                      {children}
+                    </Box>
+                  ),
+                  ol: ({ children }) => (
+                    <Box
+                      component="ol"
+                      sx={{
+                        pl: 2.5,
+                        mb: 1,
+                        mt: 0,
+                        "& li": { mb: 0.25 },
+                      }}
+                    >
+                      {children}
+                    </Box>
+                  ),
+                  li: ({ children }) => (
+                    <Box
+                      component="li"
+                      sx={{
+                        fontFamily: "var(--font-geist-sans)",
+                        fontSize: "0.825rem",
+                        lineHeight: 1.75,
+                        color: "text.primary",
+                      }}
+                    >
+                      {children}
+                    </Box>
+                  ),
+                  code: ({ inline, children, ...props }: { inline?: boolean; children?: React.ReactNode; className?: string }) =>
+                    inline ? (
+                      <Box
+                        component="code"
+                        sx={{
+                          fontFamily: "var(--font-geist-mono)",
+                          fontSize: "0.78rem",
+                          bgcolor: "rgba(59,137,255,0.1)",
+                          color: "#3b89ff",
+                          px: 0.6,
+                          py: 0.15,
+                          borderRadius: "4px",
+                        }}
+                        {...props}
+                      >
+                        {children}
+                      </Box>
+                    ) : (
+                      <Box
+                        component="code"
+                        sx={{
+                          fontFamily: "var(--font-geist-mono)",
+                          fontSize: "0.78rem",
+                          display: "block",
+                        }}
+                        {...props}
+                      >
+                        {children}
+                      </Box>
+                    ),
+                  pre: ({ children }) => (
+                    <Box
+                      component="pre"
+                      sx={{
+                        fontFamily: "var(--font-geist-mono)",
+                        fontSize: "0.78rem",
+                        bgcolor: "rgba(0,0,0,0.35)",
+                        border: "1px solid",
+                        borderColor: "divider",
+                        borderRadius: "8px",
+                        p: 1.5,
+                        mb: 1.5,
+                        mt: 0.5,
+                        overflowX: "auto",
+                        whiteSpace: "pre",
+                        lineHeight: 1.6,
+                        color: "text.primary",
+                        m: 0,
+                        "& code": {
+                          bgcolor: "transparent",
+                          p: 0,
+                          borderRadius: 0,
+                          color: "inherit",
+                          fontSize: "inherit",
+                        },
+                      }}
+                    >
+                      {children}
+                    </Box>
+                  ),
+                  a: ({ href, children }) => (
+                    <Box
+                      component="a"
+                      href={href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      sx={{
+                        color: "#3b89ff",
+                        textDecoration: "none",
+                        "&:hover": { textDecoration: "underline" },
+                      }}
+                    >
+                      {children}
+                    </Box>
+                  ),
+                  table: ({ children }) => (
+                    <Box
+                      component="table"
+                      sx={{
+                        width: "100%",
+                        borderCollapse: "collapse",
+                        mb: 1.5,
+                        fontSize: "0.8rem",
+                        fontFamily: "var(--font-geist-sans)",
+                        "& th, & td": {
+                          border: "1px solid",
+                          borderColor: "divider",
+                          px: 1.5,
+                          py: 0.75,
+                          textAlign: "left",
+                        },
+                        "& th": {
+                          fontWeight: 600,
+                          bgcolor: "rgba(59,137,255,0.07)",
+                          color: "text.secondary",
+                        },
+                        "& tr:nth-of-type(even) td": {
+                          bgcolor: "rgba(255,255,255,0.02)",
+                        },
+                      }}
+                    >
+                      {children}
+                    </Box>
+                  ),
+                  blockquote: ({ children }) => (
+                    <Box
+                      component="blockquote"
+                      sx={{
+                        borderLeft: "3px solid #3b89ff",
+                        pl: 1.5,
+                        ml: 0,
+                        mb: 1,
+                        color: "text.secondary",
+                        fontStyle: "italic",
+                        fontFamily: "var(--font-geist-sans)",
+                        fontSize: "0.825rem",
+                      }}
+                    >
+                      {children}
+                    </Box>
+                  ),
+                  hr: () => (
+                    <Box
+                      component="hr"
+                      sx={{
+                        border: "none",
+                        borderTop: "1px solid",
+                        borderColor: "divider",
+                        my: 1.5,
+                      }}
+                    />
+                  ),
                 }}
               >
                 {hasThinking ? responseText : displayText}
-                {isStreamingResponse && (
-                  <Box
-                    component="span"
-                    sx={{
-                      display: "inline-block",
-                      width: "0.5em",
-                      height: "1em",
-                      bgcolor: "#3b89ff",
-                      ml: "1px",
-                      verticalAlign: "text-bottom",
-                      "@keyframes blink": {
-                        "0%, 100%": { opacity: 1 },
-                        "50%": { opacity: 0 },
-                      },
-                      animation: "blink 0.9s step-end infinite",
-                    }}
-                  />
-                )}
-              </Typography>
+              </ReactMarkdown>
+              {isStreamingResponse && (
+                <Box
+                  component="span"
+                  sx={{
+                    display: "inline-block",
+                    width: "0.5em",
+                    height: "1em",
+                    bgcolor: "#3b89ff",
+                    ml: "1px",
+                    verticalAlign: "text-bottom",
+                    "@keyframes blink": {
+                      "0%, 100%": { opacity: 1 },
+                      "50%": { opacity: 0 },
+                    },
+                    animation: "blink 0.9s step-end infinite",
+                  }}
+                />
+              )}
             </Box>
           )}
 
