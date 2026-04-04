@@ -118,12 +118,23 @@ def last_date(ticker: str, data_dir: Path = DATA_DIR, interval: str = "1d") -> d
     if not path.exists():
         return None
 
-    df = pd.read_parquet(path, columns=["Close"])
-    if df.empty:
-        return None
+    from market_data.duckdb_reader import _cursor
 
-    ts: pd.Timestamp = df.index.max()
-    return ts.date()
+    try:
+        conn = _cursor(data_dir)
+        row = conn.execute(
+            'SELECT MAX("Date") FROM read_parquet(?, hive_partitioning=false)',
+            [str(path)],
+        ).fetchone()
+        if row and row[0] is not None:
+            return pd.Timestamp(row[0]).date()
+        return None
+    except Exception:
+        df = pd.read_parquet(path, columns=["Close"])
+        if df.empty:
+            return None
+        ts: pd.Timestamp = df.index.max()
+        return ts.date()
 
 
 def list_tickers(data_dir: Path = DATA_DIR) -> list[str]:
@@ -165,11 +176,45 @@ def clean(keep_days: int = 365, data_dir: Path = DATA_DIR) -> dict[str, int]:
     cutoff = pd.Timestamp(date.today()) - pd.Timedelta(days=keep_days)
     removed: dict[str, int] = {}
 
-    for path in sorted(data_dir.glob("*.parquet")):
+    from market_data.duckdb_reader import _cursor
+
+    pattern = str(data_dir / "*.parquet")
+    parquet_files = list(data_dir.glob("*.parquet"))
+    if not parquet_files:
+        return {}
+
+    conn = _cursor(data_dir)
+    try:
+        # Single DuckDB scan to find files with rows older than cutoff
+        stale_files = conn.execute(
+            """
+            SELECT filename, COUNT(*) AS total, SUM(CASE WHEN "Date" < ? THEN 1 ELSE 0 END) AS stale
+            FROM read_parquet(?, filename=true, hive_partitioning=false)
+            GROUP BY filename
+            HAVING stale > 0
+            """,
+            [cutoff, pattern],
+        ).fetchall()
+    except Exception:
+        stale_files = None
+
+    if stale_files is None:
+        for path in sorted(data_dir.glob("*.parquet")):
+            df = pd.read_parquet(path)
+            original_len = len(df)
+            df = df[df.index >= cutoff]
+            if len(df) < original_len:
+                removed[path.stem] = original_len - len(df)
+                df.to_parquet(path, engine="pyarrow")
+        return removed
+
+    for filename, _total, stale_count in stale_files:
+        path = Path(filename)
+        if not path.exists():
+            continue
         df = pd.read_parquet(path)
         original_len = len(df)
         df = df[df.index >= cutoff]
-
         if len(df) < original_len:
             removed[path.stem] = original_len - len(df)
             df.to_parquet(path, engine="pyarrow")

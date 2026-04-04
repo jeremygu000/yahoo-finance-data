@@ -801,12 +801,15 @@ async def delete_from_portfolio(ticker: str) -> PortfolioResponse:
 
 @v1.get("/portfolio/summary", response_model=PortfolioSummaryResponse)
 async def get_portfolio_summary() -> PortfolioSummaryResponse:
-    from market_data.api import get_latest as _get_latest
+    from market_data.duckdb_reader import batch_latest
 
     holdings = await asyncio.to_thread(portfolio_mod.list_holdings)
+    tickers = [h.ticker for h in holdings]
+    latest_map = await asyncio.to_thread(batch_latest, tickers) if tickers else {}
+
     items: list[PortfolioSummaryItem] = []
     for h in holdings:
-        row = await asyncio.to_thread(_get_latest, h.ticker)
+        row = latest_map.get(h.ticker)
         current_price: float | None = None
         market_value: float | None = None
         total_gain: float | None = None
