@@ -17,6 +17,7 @@ import type {
   SummaryRequest,
   SummaryResponse,
   ChatRequest,
+  HeatmapItem,
 } from "./types";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8100";
@@ -153,6 +154,10 @@ export async function deleteAlert(alertId: string): Promise<AlertListResponse> {
 export async function fetchAlertChannels(): Promise<string[]> {
   const data = await fetcher<{ channels: string[] }>("/api/v1/alerts/channels");
   return data.channels;
+}
+
+export async function fetchHeatmap(): Promise<HeatmapItem[]> {
+  return fetcher<HeatmapItem[]>("/api/v1/heatmap");
 }
 
 export async function testAlertNotification(alertId: string): Promise<{ status: string; results?: Record<string, boolean> }> {

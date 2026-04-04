@@ -11,6 +11,7 @@ from market_data.logging_config import setup_logging
 from market_data.store import clean, last_date, save, status
 from market_data.watchlist import add_ticker, list_tickers, remove_ticker
 from market_data import alerts as alerts_mod
+from market_data import quality as quality_mod
 
 logger = logging.getLogger(__name__)
 
@@ -184,6 +185,70 @@ def cmd_alert_remove(args: argparse.Namespace) -> None:
     print(f"Alert {args.id} removed.")
 
 
+def cmd_quality(args: argparse.Namespace) -> None:
+    stale_days: int = args.stale_days
+    zscore: float = args.zscore
+
+    if args.gaps:
+        tickers = [t.strip() for t in args.gaps.split(",")]
+        for t in tickers:
+            gaps = quality_mod.detect_gaps(t, interval=args.interval)
+            if gaps:
+                print(f"{t}: {len(gaps)} missing trading days")
+                for g in gaps[:20]:
+                    print(f"  {g}")
+                if len(gaps) > 20:
+                    print(f"  ... and {len(gaps) - 20} more")
+            else:
+                print(f"{t}: no gaps detected")
+        return
+
+    if args.outliers:
+        tickers = [t.strip() for t in args.outliers.split(",")]
+        for t in tickers:
+            hits = quality_mod.detect_outliers(t, interval=args.interval, threshold=zscore)
+            if hits:
+                print(f"{t}: {len(hits)} outliers (|z| > {zscore})")
+                for h in hits:
+                    print(f"  {h['date']}  close={h['close']}  return={h['return_pct']}%  z={h['zscore']}")
+            else:
+                print(f"{t}: no outliers")
+        return
+
+    report = quality_mod.generate_report(stale_days=stale_days, zscore_threshold=zscore)
+    print(f"Data Quality Report — {report.scan_date}")
+    print(f"Files: {report.total_files}  Rows: {report.total_rows:,}")
+    print()
+
+    if report.anomalies:
+        print(f"Anomalies: {len(report.anomalies)}")
+        by_type: dict[str, int] = {}
+        for a in report.anomalies:
+            by_type[a.issue] = by_type.get(a.issue, 0) + a.count
+        for issue, count in sorted(by_type.items()):
+            print(f"  {issue}: {count:,} rows")
+        print()
+
+    stale = [t for t in report.tickers if t.days_stale > stale_days]
+    if stale:
+        print(f"Stale tickers (>{stale_days} days): {len(stale)}")
+        for t in stale[:20]:
+            print(f"  {t.ticker}: last={t.last_date} ({t.days_stale}d stale)")
+        if len(stale) > 20:
+            print(f"  ... and {len(stale) - 20} more")
+        print()
+
+    low_fill = [t for t in report.tickers if t.completeness_pct < 99.0]
+    if low_fill:
+        print(f"Low completeness (<99%): {len(low_fill)}")
+        for t in sorted(low_fill, key=lambda x: x.completeness_pct):
+            print(f"  {t.ticker}: {t.completeness_pct}% fill, {t.nan_pct}% NaN")
+        print()
+
+    if not report.anomalies and not stale and not low_fill:
+        print("All checks passed.")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         prog="market-data",
@@ -238,6 +303,25 @@ def main() -> None:
     p_alert_remove = sub.add_parser("alert-remove", help="Remove an alert by ID")
     p_alert_remove.add_argument("--id", type=str, required=True, help="Alert UUID to remove")
 
+    p_quality = sub.add_parser("quality", help="Run data quality checks")
+    p_quality.add_argument(
+        "--stale-days", type=int, default=3, help="Days before a ticker is considered stale (default 3)"
+    )
+    p_quality.add_argument(
+        "--zscore", type=float, default=4.0, help="Z-score threshold for outlier detection (default 4.0)"
+    )
+    p_quality.add_argument("--gaps", type=str, default="", help="Comma-separated tickers to check for trading day gaps")
+    p_quality.add_argument(
+        "--outliers", type=str, default="", help="Comma-separated tickers to check for price outliers"
+    )
+    p_quality.add_argument(
+        "--interval",
+        type=str,
+        default="1d",
+        choices=VALID_INTERVALS,
+        help="Data interval for gap/outlier checks (default 1d)",
+    )
+
     args = parser.parse_args()
     setup_logging(json_format=False, level=logging.DEBUG if args.verbose else logging.INFO)
 
@@ -252,6 +336,7 @@ def main() -> None:
         "alerts": cmd_alerts,
         "alert-add": cmd_alert_add,
         "alert-remove": cmd_alert_remove,
+        "quality": cmd_quality,
     }
 
     handler = commands.get(args.command)

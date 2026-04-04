@@ -26,6 +26,13 @@ export interface TickerOverviewResponse {
   total_pages: number;
 }
 
+export interface HeatmapItem {
+  ticker: string;
+  close: number;
+  change_pct: number | null;
+  volume: number;
+}
+
 export interface OHLCVBar {
   date: string;
   time: number; // Unix timestamp (seconds)

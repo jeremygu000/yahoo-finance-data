@@ -27,6 +27,7 @@ import type { OHLCVBar } from "@/lib/types";
 import { useThemeMode } from "./ThemeProvider";
 import ExportButton from "./ExportButton";
 import useTickers from "@/lib/useTickers";
+import { VolumeProfilePlugin, type VolumeBar } from "./plugins/VolumeProfilePlugin";
 
 type KLineInterval = "daily" | "weekly" | "monthly";
 
@@ -117,6 +118,8 @@ export default function CandlestickChart() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [rawBars, setRawBars] = useState<OHLCVBar[]>([]);
+  const [showVP, setShowVP] = useState(false);
+  const vpPluginRef = useRef<VolumeProfilePlugin | null>(null);
 
   const { mode } = useThemeMode();
 
@@ -256,6 +259,40 @@ export default function CandlestickChart() {
     volumeChartRef.current?.timeScale().fitContent();
   }, [rawBars, interval]);
 
+  useEffect(() => {
+    if (!candleRef.current) return;
+
+    if (showVP) {
+      const displayBars: OHLCVBar[] =
+        interval === "weekly"
+          ? aggregateWeekly(rawBars)
+          : interval === "monthly"
+            ? aggregateMonthly(rawBars)
+            : rawBars;
+
+      const vpBars: VolumeBar[] = displayBars.map((b) => ({
+        time: b.time,
+        open: b.open,
+        close: b.close,
+        high: b.high,
+        low: b.low,
+        volume: b.volume,
+      }));
+
+      if (!vpPluginRef.current) {
+        const plugin = new VolumeProfilePlugin();
+        plugin.setData(vpBars);
+        candleRef.current.attachPrimitive(plugin);
+        vpPluginRef.current = plugin;
+      } else {
+        vpPluginRef.current.setData(vpBars);
+      }
+    } else if (vpPluginRef.current) {
+      candleRef.current.detachPrimitive(vpPluginRef.current);
+      vpPluginRef.current = null;
+    }
+  }, [showVP, rawBars, interval]);
+
   const displayBarsForLatest: OHLCVBar[] =
     interval === "weekly"
       ? aggregateWeekly(rawBars)
@@ -294,6 +331,20 @@ export default function CandlestickChart() {
               </ToggleButton>
             ))}
           </ToggleButtonGroup>
+
+          <ToggleButton
+            value="vp"
+            selected={showVP}
+            onChange={() => setShowVP((v) => !v)}
+            size="small"
+            sx={{
+              fontFamily: "var(--font-geist-mono)",
+              fontSize: "0.75rem",
+              fontWeight: 600,
+            }}
+          >
+            VP
+          </ToggleButton>
 
           <ExportButton ticker={ticker} days={FULL_HISTORY_DAYS} />
 

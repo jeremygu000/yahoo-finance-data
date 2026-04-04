@@ -26,6 +26,7 @@ import { fetchOHLCV, fetchIndicators } from "@/lib/api";
 import { INDICATOR_COLORS, type IndicatorType } from "@/lib/types";
 import { useThemeMode } from "./ThemeProvider";
 import useTickers from "@/lib/useTickers";
+import { BollingerFillPlugin } from "./plugins/BollingerFillPlugin";
 
 const DAYS_OPTIONS = [30, 90, 180, 365] as const;
 type Days = (typeof DAYS_OPTIONS)[number];
@@ -322,6 +323,14 @@ export default function IndicatorChart() {
           upperSeries.setData(upperData);
           middleSeries.setData(middleData);
           lowerSeries.setData(lowerData);
+
+          const bandData = upperData.map((u, i) => ({
+            time: u.time,
+            upper: u.value,
+            lower: lowerData[i].value,
+          }));
+          const fillPlugin = new BollingerFillPlugin(bandData);
+          upperSeries.attachPrimitive(fillPlugin);
         }
 
         chart.timeScale().fitContent();

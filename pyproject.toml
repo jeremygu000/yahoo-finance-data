@@ -21,6 +21,11 @@ dependencies = [
 [project.scripts]
 market-data = "market_data.cli:main"
 
+[project.optional-dependencies]
+dev = [
+    "exchange-calendars>=4.13.2",
+]
+
 [build-system]
 requires = ["uv_build>=0.8.11,<0.9.0"]
 build-backend = "uv_build"

@@ -365,3 +365,68 @@ def compare_close(
     Uses column projection to only read Date and Close columns.
     """
     return batch_load(tickers, days=days, data_dir=data_dir, interval=interval, columns=["Date", "Close"])
+
+
+def heatmap_data(
+    data_dir: Path = DATA_DIR,
+    interval: str = "1d",
+) -> list[dict[str, object]]:
+    """Return ticker, change_pct, and volume for every ticker in a single scan.
+
+    Uses two DuckDB queries:
+    1. A glob scan to identify all files for the given interval.
+    2. For each file, read the last row to compute change_pct.
+    """
+    pattern = _glob_pattern(data_dir, interval)
+    conn = _cursor(data_dir)
+
+    try:
+        filenames = conn.execute(
+            """
+            SELECT DISTINCT filename
+            FROM read_parquet(?, filename=true, hive_partitioning=false)
+            """,
+            [pattern],
+        ).fetchall()
+    except duckdb.IOException:
+        return []
+
+    results: list[dict[str, object]] = []
+    for (filename,) in filenames:
+        ticker, _intv = _parse_ticker_from_filename(filename)
+        try:
+            row = conn.execute(
+                """
+                SELECT "Open", "Close", "Volume"
+                FROM read_parquet(?, hive_partitioning=false)
+                ORDER BY "Date" DESC
+                LIMIT 1
+                """,
+                [filename],
+            ).fetchone()
+        except duckdb.IOException:
+            continue
+
+        if not row:
+            continue
+
+        open_val, close_val, volume = row
+        open_f = float(open_val)
+        close_f = float(close_val)
+        vol = int(volume) if volume else 0
+
+        change_pct: float | None = None
+        if open_f != 0:
+            change_pct = round(((close_f - open_f) / open_f) * 100, 4)
+
+        results.append(
+            {
+                "ticker": ticker,
+                "close": close_f,
+                "change_pct": change_pct,
+                "volume": vol,
+            }
+        )
+
+    results.sort(key=lambda x: str(x["ticker"]))
+    return results

@@ -407,6 +407,13 @@ async def get_tickers_overview(
     return await asyncio.to_thread(store.status_paginated, page, page_size, search)
 
 
+@v1.get("/heatmap")
+async def get_heatmap(
+    interval: str = Query(default="1d"),
+) -> list[dict[str, object]]:
+    return await asyncio.to_thread(duckdb_reader.heatmap_data, DATA_DIR, interval)
+
+
 @v1.get("/ohlcv/{ticker}", response_model=list[OHLCVBar])
 async def get_ohlcv(
     ticker: str,
