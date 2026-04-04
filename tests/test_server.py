@@ -12,6 +12,13 @@ import market_data.alerts as alerts_mod
 client = TestClient(app, raise_server_exceptions=False)
 
 
+@pytest.fixture(autouse=True)
+def _reset_rate_limiter() -> None:
+    from market_data.server import _request_log
+
+    _request_log.clear()
+
+
 class TestHealth:
     def test_health(self) -> None:
         resp = client.get("/health")
