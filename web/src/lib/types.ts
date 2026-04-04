@@ -80,8 +80,14 @@ export interface AlertTriggered {
 }
 
 export interface WSMessage {
-  type: "price_update" | "alert_triggered" | "error";
-  data: PriceUpdate[] | AlertTriggered[] | string;
+  type: "price_update" | "alert_triggered" | "ping" | "subscribed" | "unsubscribed" | "error";
+  data?: PriceUpdate[] | AlertTriggered[] | string;
+  tickers?: string[];
+}
+
+export interface WSSubscribeMessage {
+  action: "subscribe" | "unsubscribe";
+  tickers: string[];
 }
 
 export type SortDirection = "asc" | "desc";

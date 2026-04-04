@@ -69,6 +69,16 @@ class WSMessage(BaseModel):
     data: list[PriceUpdate] | list[AlertTriggered] | str
 
 
+class WSSubscribeRequest(BaseModel):
+    action: str  # "subscribe" | "unsubscribe"
+    tickers: list[str]
+
+
+class WSSubscriptionAck(BaseModel):
+    type: str  # "subscribed" | "unsubscribed"
+    tickers: list[str]
+
+
 class WatchlistResponse(BaseModel):
     tickers: list[str]
 

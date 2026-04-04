@@ -71,7 +71,8 @@ CORS_ORIGINS: list[str] = [
     o.strip() for o in os.environ.get("MARKET_DATA_CORS_ORIGINS", _default_cors).split(",") if o.strip()
 ]
 
-WS_POLL_INTERVAL = int(os.environ.get("MARKET_DATA_WS_POLL_INTERVAL", "30"))
+WS_POLL_INTERVAL = int(os.environ.get("MARKET_DATA_WS_POLL_INTERVAL", "5"))
+WS_HEARTBEAT_INTERVAL = int(os.environ.get("MARKET_DATA_WS_HEARTBEAT_INTERVAL", "15"))
 
 CACHE_TTL_SECONDS = int(os.environ.get("MARKET_DATA_CACHE_TTL", "120"))
 CACHE_MAX_ENTRIES = int(os.environ.get("MARKET_DATA_CACHE_MAX_ENTRIES", "4096"))

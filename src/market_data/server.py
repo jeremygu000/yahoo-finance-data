@@ -37,6 +37,7 @@ from market_data.config import (
     DEFAULT_INTERVAL,
     LOG_DIR,
     VALID_INTERVALS,
+    WS_HEARTBEAT_INTERVAL,
     WS_POLL_INTERVAL,
 )
 from market_data.exceptions import (
@@ -76,6 +77,8 @@ from market_data.schemas import (
     WatchlistAddRequest,
     WatchlistResponse,
     WSMessage,
+    WSSubscribeRequest,
+    WSSubscriptionAck,
 )
 
 logger = logging.getLogger(__name__)
@@ -83,8 +86,9 @@ logger = logging.getLogger(__name__)
 RATE_LIMIT_REQUESTS = 60
 RATE_LIMIT_WINDOW = 60
 _request_log: dict[str, collections.deque[float]] = {}
-_ws_clients: set[WebSocket] = set()
+_ws_subscriptions: dict[WebSocket, set[str]] = {}
 _price_task: asyncio.Task[None] | None = None
+_heartbeat_task: asyncio.Task[None] | None = None
 
 
 def _is_rate_limited(client_ip: str) -> bool:
@@ -102,23 +106,25 @@ def _is_rate_limited(client_ip: str) -> bool:
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
-    global _price_task
+    global _price_task, _heartbeat_task
     from market_data.logging_config import setup_logging
 
     setup_logging(log_dir=LOG_DIR)
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     logger.info("server starting", extra={"path": str(DATA_DIR)})
     _price_task = asyncio.create_task(_poll_prices())
+    _heartbeat_task = asyncio.create_task(_heartbeat())
     yield
-    if _price_task is not None:
-        _price_task.cancel()
-        try:
-            await _price_task
-        except asyncio.CancelledError:
-            pass
-    for ws in list(_ws_clients):
+    for task in (_price_task, _heartbeat_task):
+        if task is not None:
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+    for ws in list(_ws_subscriptions):
         await ws.close()
-    _ws_clients.clear()
+    _ws_subscriptions.clear()
     store.invalidate_cache()
     _request_log.clear()
     logger.info("server shutting down")
@@ -256,33 +262,99 @@ async def market_data_error_handler(_request: Request, exc: MarketDataError) -> 
     return JSONResponse(status_code=500, content={"error": str(exc)})
 
 
-async def _broadcast(msg: WSMessage) -> None:
+async def _broadcast(msg: WSMessage, filter_tickers: list[str] | None = None) -> None:
     payload = msg.model_dump_json()
     dead: list[WebSocket] = []
-    for ws in _ws_clients:
+    for ws, subs in _ws_subscriptions.items():
+        if filter_tickers and subs and not subs.intersection(filter_tickers):
+            continue
+        try:
+            if filter_tickers and subs:
+                filtered_data = [u for u in msg.data if isinstance(u, PriceUpdate) and u.ticker in subs]
+                if not filtered_data:
+                    continue
+                filtered_msg = WSMessage(type=msg.type, data=filtered_data)
+                await ws.send_text(filtered_msg.model_dump_json())
+            else:
+                await ws.send_text(payload)
+        except Exception:
+            dead.append(ws)
+    for ws in dead:
+        _ws_subscriptions.pop(ws, None)
+
+
+async def _broadcast_alerts(msg: WSMessage, tickers: list[str]) -> None:
+    payload = msg.model_dump_json()
+    dead: list[WebSocket] = []
+    for ws, subs in _ws_subscriptions.items():
+        if subs and not subs.intersection(tickers):
+            continue
         try:
             await ws.send_text(payload)
         except Exception:
             dead.append(ws)
     for ws in dead:
-        _ws_clients.discard(ws)
+        _ws_subscriptions.pop(ws, None)
+
+
+def _fetch_live_prices(tickers: list[str]) -> list[PriceUpdate]:
+    import yfinance as yf
+    from datetime import datetime, timezone
+
+    updates: list[PriceUpdate] = []
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    for t in tickers:
+        try:
+            fi = yf.Ticker(t).fast_info
+            price = float(fi["lastPrice"])
+            updates.append(
+                PriceUpdate(
+                    ticker=t,
+                    date=today,
+                    open=float(fi.get("open", price)),
+                    high=float(fi.get("dayHigh", price)),
+                    low=float(fi.get("dayLow", price)),
+                    close=price,
+                    volume=int(fi.get("lastVolume", 0)),
+                )
+            )
+        except Exception:
+            pass
+    return updates
 
 
 async def _poll_prices() -> None:
     while True:
         await asyncio.sleep(WS_POLL_INTERVAL)
-        if not _ws_clients:
+        if not _ws_subscriptions:
             continue
-        tickers = await asyncio.to_thread(store.list_tickers)
+
+        subscribed: set[str] = set()
+        for subs in _ws_subscriptions.values():
+            if subs:
+                subscribed.update(subs)
+
+        if subscribed:
+            tickers = list(subscribed)
+        else:
+            tickers = await asyncio.to_thread(store.list_tickers)
+
         if not tickers:
             continue
-        latest_map = await asyncio.to_thread(duckdb_reader.batch_latest, tickers)
-        updates: list[PriceUpdate] = []
-        for t, row in latest_map.items():
-            row["ticker"] = t
-            updates.append(PriceUpdate.model_validate(row))
+
+        updates = await asyncio.to_thread(_fetch_live_prices, tickers)
+        if not updates:
+            latest_map = await asyncio.to_thread(duckdb_reader.batch_latest, tickers)
+            for t, row in latest_map.items():
+                row["ticker"] = t
+                updates.append(PriceUpdate.model_validate(row))
+
         if updates:
-            await _broadcast(WSMessage(type="price_update", data=updates))
+            update_tickers = [u.ticker for u in updates]
+            await _broadcast(
+                WSMessage(type="price_update", data=updates),
+                filter_tickers=update_tickers,
+            )
             alert_store = await asyncio.to_thread(alerts_mod.load_alerts)
             fired = await asyncio.to_thread(alerts_mod.evaluate_alerts, updates, alert_store)
             if fired:
@@ -297,7 +369,11 @@ async def _poll_prices() -> None:
                     )
                     for item in fired
                 ]
-                await _broadcast(WSMessage(type="alert_triggered", data=triggered_msgs))
+                alert_tickers = [m.ticker for m in triggered_msgs]
+                await _broadcast_alerts(
+                    WSMessage(type="alert_triggered", data=triggered_msgs),
+                    alert_tickers,
+                )
                 dispatcher = notif_mod.get_dispatcher()
                 for item in fired:
                     alert: alerts_mod.Alert = item["alert"]
@@ -310,24 +386,56 @@ async def _poll_prices() -> None:
                         await dispatcher.dispatch(alert.channels, recipient_map, subject, body)
 
 
+async def _heartbeat() -> None:
+    while True:
+        await asyncio.sleep(WS_HEARTBEAT_INTERVAL)
+        if not _ws_subscriptions:
+            continue
+        dead: list[WebSocket] = []
+        for ws in list(_ws_subscriptions):
+            try:
+                await ws.send_json({"type": "ping"})
+            except Exception:
+                dead.append(ws)
+        for ws in dead:
+            _ws_subscriptions.pop(ws, None)
+
+
 @app.websocket("/ws/prices")
 async def ws_prices(ws: WebSocket) -> None:
-    # Validate API key via query param (browsers can't send custom headers on WS)
     if API_KEY is not None:
         token = ws.query_params.get("api_key", "")
         if token != API_KEY:
             await ws.close(code=1008, reason="Unauthorized")
             return
     await ws.accept()
-    _ws_clients.add(ws)
+    _ws_subscriptions[ws] = set()
     logger.info("ws client connected", extra={"client_ip": ws.client.host if ws.client else "unknown"})
     try:
         while True:
-            await ws.receive_text()
+            raw = await ws.receive_text()
+            try:
+                msg = json.loads(raw)
+            except (json.JSONDecodeError, TypeError):
+                continue
+            if msg.get("type") == "pong":
+                continue
+            action = msg.get("action")
+            tickers = msg.get("tickers")
+            if action == "subscribe" and isinstance(tickers, list):
+                cleaned = [t.upper().strip() for t in tickers if isinstance(t, str) and t.strip()]
+                _ws_subscriptions[ws].update(cleaned)
+                ack = WSSubscriptionAck(type="subscribed", tickers=sorted(_ws_subscriptions[ws]))
+                await ws.send_text(ack.model_dump_json())
+            elif action == "unsubscribe" and isinstance(tickers, list):
+                cleaned = [t.upper().strip() for t in tickers if isinstance(t, str) and t.strip()]
+                _ws_subscriptions[ws].difference_update(cleaned)
+                ack = WSSubscriptionAck(type="unsubscribed", tickers=sorted(_ws_subscriptions[ws]))
+                await ws.send_text(ack.model_dump_json())
     except WebSocketDisconnect:
         pass
     finally:
-        _ws_clients.discard(ws)
+        _ws_subscriptions.pop(ws, None)
         logger.info("ws client disconnected")
 
 

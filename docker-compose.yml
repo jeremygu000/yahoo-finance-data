@@ -1,10 +1,26 @@
 services:
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "${NGINX_PORT:-80}:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_started
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 128M
+
   backend:
     build:
       context: .
       dockerfile: Dockerfile
-    ports:
-      - "8100:8100"
     volumes:
       - market_data:/data
     env_file:
@@ -12,27 +28,32 @@ services:
     environment:
       - MARKET_DATA_DIR=/data/parquet
       - MARKET_DATA_LOG_DIR=/data/logs
-      - MARKET_DATA_CORS_ORIGINS=http://localhost:3000
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8100/api/tickers')"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 5s
+      - MARKET_DATA_CORS_ORIGINS=http://localhost:${NGINX_PORT:-80}
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
 
   frontend:
     build:
       context: .
       dockerfile: web/Dockerfile
-    ports:
-      - "3000:3000"
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:${NGINX_PORT:-80}}
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8100
+      - HOSTNAME=0.0.0.0
     depends_on:
       backend:
         condition: service_healthy
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 256M
 
-  # One-off service to fetch initial data
   fetch:
     build:
       context: .

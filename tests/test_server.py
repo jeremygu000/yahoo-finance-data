@@ -288,7 +288,7 @@ class TestWebSocket:
                 patch("market_data.server.store.list_tickers", return_value=["AAPL"]),
                 patch("market_data.api.get_latest", return_value=mock_latest),
             ):
-                from market_data.server import _ws_clients, _broadcast, WSMessage, PriceUpdate
+                from market_data.server import _ws_subscriptions, _broadcast, WSMessage, PriceUpdate
 
                 import asyncio
 
@@ -305,6 +305,65 @@ class TestWebSocket:
             assert len(data["data"]) == 1
             assert data["data"][0]["ticker"] == "AAPL"
             assert data["data"][0]["close"] == 104.0
+
+    def test_ws_subscribe(self) -> None:
+        with client.websocket_connect("/ws/prices") as ws:
+            ws.send_json({"action": "subscribe", "tickers": ["AAPL", "MSFT"]})
+            ack = ws.receive_json()
+            assert ack["type"] == "subscribed"
+            assert "AAPL" in ack["tickers"]
+            assert "MSFT" in ack["tickers"]
+
+    def test_ws_unsubscribe(self) -> None:
+        with client.websocket_connect("/ws/prices") as ws:
+            ws.send_json({"action": "subscribe", "tickers": ["AAPL", "MSFT", "GOOGL"]})
+            ws.receive_json()
+            ws.send_json({"action": "unsubscribe", "tickers": ["MSFT"]})
+            ack = ws.receive_json()
+            assert ack["type"] == "unsubscribed"
+            assert "MSFT" not in ack["tickers"]
+            assert "AAPL" in ack["tickers"]
+            assert "GOOGL" in ack["tickers"]
+
+    def test_ws_heartbeat_pong(self) -> None:
+        with client.websocket_connect("/ws/prices") as ws:
+            import asyncio
+            from market_data.server import _heartbeat, _ws_subscriptions
+
+            loop = asyncio.new_event_loop()
+            task = loop.create_task(_heartbeat())
+            loop.run_until_complete(asyncio.sleep(0.01))
+            task.cancel()
+            try:
+                loop.run_until_complete(task)
+            except asyncio.CancelledError:
+                pass
+            loop.close()
+
+    def test_ws_filtered_broadcast(self) -> None:
+        import asyncio
+        from market_data.server import _ws_subscriptions, _broadcast, WSMessage, PriceUpdate
+
+        with client.websocket_connect("/ws/prices") as ws:
+            ws.send_json({"action": "subscribe", "tickers": ["AAPL"]})
+            ws.receive_json()
+
+            aapl = PriceUpdate(
+                ticker="AAPL", date="2025-01-01", open=100.0, high=105.0, low=99.0, close=104.0, volume=1000
+            )
+            msft = PriceUpdate(
+                ticker="MSFT", date="2025-01-01", open=200.0, high=210.0, low=199.0, close=208.0, volume=2000
+            )
+            msg = WSMessage(type="price_update", data=[aapl, msft])
+            loop = asyncio.new_event_loop()
+            loop.run_until_complete(_broadcast(msg, filter_tickers=["AAPL", "MSFT"]))
+            loop.close()
+
+            data = ws.receive_json()
+            assert data["type"] == "price_update"
+            tickers_received = [d["ticker"] for d in data["data"]]
+            assert "AAPL" in tickers_received
+            assert "MSFT" not in tickers_received
 
 
 class TestWatchlist:

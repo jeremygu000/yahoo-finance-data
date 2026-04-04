@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import type { PriceUpdate, WSMessage, AlertTriggered } from "./types";
+import type { PriceUpdate, WSMessage, AlertTriggered, WSSubscribeMessage } from "./types";
 
 const WS_BASE = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8100").replace(/^http/, "ws");
 const WS_API_KEY = process.env.NEXT_PUBLIC_API_KEY ?? "";
@@ -16,9 +16,38 @@ export function usePriceWebSocket() {
   const [prices, setPrices] = useState<Record<string, PriceUpdate>>({});
   const [alerts, setAlerts] = useState<AlertTriggered[]>([]);
   const [status, setStatus] = useState<WSStatus>("disconnected");
+  const [subscribedTickers, setSubscribedTickers] = useState<string[]>([]);
   const wsRef = useRef<WebSocket | null>(null);
   const attemptsRef = useRef(0);
   const unmountedRef = useRef(false);
+  const pendingSubRef = useRef<WSSubscribeMessage[]>([]);
+
+  const sendMessage = useCallback((msg: WSSubscribeMessage) => {
+    const ws = wsRef.current;
+    if (ws?.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify(msg));
+    } else {
+      pendingSubRef.current.push(msg);
+    }
+  }, []);
+
+  const subscribe = useCallback(
+    (tickers: string[]) => {
+      if (tickers.length > 0) {
+        sendMessage({ action: "subscribe", tickers });
+      }
+    },
+    [sendMessage],
+  );
+
+  const unsubscribe = useCallback(
+    (tickers: string[]) => {
+      if (tickers.length > 0) {
+        sendMessage({ action: "unsubscribe", tickers });
+      }
+    },
+    [sendMessage],
+  );
 
   const connect = useCallback(() => {
     if (unmountedRef.current) return;
@@ -31,11 +60,28 @@ export function usePriceWebSocket() {
     ws.addEventListener("open", () => {
       setStatus("connected");
       attemptsRef.current = 0;
+      for (const msg of pendingSubRef.current) {
+        ws.send(JSON.stringify(msg));
+      }
+      pendingSubRef.current = [];
     });
 
     ws.addEventListener("message", (event) => {
       try {
         const msg = JSON.parse(event.data as string) as WSMessage;
+
+        if (msg.type === "ping") {
+          ws.send(JSON.stringify({ type: "pong" }));
+          return;
+        }
+
+        if (msg.type === "subscribed" || msg.type === "unsubscribed") {
+          if (Array.isArray(msg.tickers)) {
+            setSubscribedTickers(msg.tickers);
+          }
+          return;
+        }
+
         if (msg.type === "price_update" && Array.isArray(msg.data)) {
           setPrices((prev) => {
             const next = { ...prev };
@@ -80,5 +126,5 @@ export function usePriceWebSocket() {
     };
   }, [connect]);
 
-  return { prices, alerts, status };
+  return { prices, alerts, status, subscribedTickers, subscribe, unsubscribe };
 }
