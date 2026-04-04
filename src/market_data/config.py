@@ -47,6 +47,9 @@ DEFAULT_TICKERS: list[str] = [
     "UNH",
 ]
 
+TICKER_LIST_FILE: str = os.environ.get("MARKET_DATA_TICKER_LIST_FILE", "")
+BATCH_SIZE: int = int(os.environ.get("MARKET_DATA_BATCH_SIZE", "50"))
+
 LOOKBACK_DAYS = int(os.environ.get("MARKET_DATA_LOOKBACK_DAYS", "365"))
 MIN_ROLLING_DAYS = 30
 FETCH_INTERVAL = "1d"
@@ -82,3 +85,16 @@ SMTP_FROM: str | None = os.environ.get("SMTP_FROM")
 OLLAMA_HOST: str = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
 OLLAMA_MODEL: str = os.environ.get("OLLAMA_MODEL", "qwen3:32b")
 OLLAMA_TIMEOUT: int = int(os.environ.get("OLLAMA_TIMEOUT", "180"))
+
+
+def get_tickers() -> list[str]:
+    """Load tickers from TICKER_LIST_FILE if set, otherwise use DEFAULT_TICKERS."""
+    if TICKER_LIST_FILE and Path(TICKER_LIST_FILE).expanduser().exists():
+        tickers = [
+            line.strip().upper()
+            for line in Path(TICKER_LIST_FILE).expanduser().read_text().splitlines()
+            if line.strip() and not line.strip().startswith("#")
+        ]
+        if tickers:
+            return list(dict.fromkeys(tickers))  # dedupe, preserve order
+    return DEFAULT_TICKERS

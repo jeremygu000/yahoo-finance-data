@@ -7,7 +7,7 @@ from datetime import date, timedelta
 
 import pandas as pd
 
-from market_data.config import MAX_RETRIES, RETRY_DELAY_RANGE
+from market_data.config import BATCH_SIZE, MAX_RETRIES, RETRY_DELAY_RANGE
 from market_data.providers import get_fallback_chain
 from market_data.providers.base import MarketDataProvider
 
@@ -47,6 +47,35 @@ def _fetch_with_retry(
     return {}
 
 
+def _chunked(items: list[str], size: int) -> list[list[str]]:
+    return [items[i : i + size] for i in range(0, len(items), size)]
+
+
+def _fetch_chunk(
+    chunk: list[str],
+    start: date,
+    end: date,
+    interval: str,
+    eligible: list[MarketDataProvider],
+) -> dict[str, pd.DataFrame]:
+    primary = eligible[0]
+    fallbacks = eligible[1:]
+
+    result = _fetch_with_retry(primary, chunk, start, end, interval)
+
+    missing = [t for t in chunk if t not in result]
+    for provider in fallbacks:
+        if not missing:
+            break
+        logger.info("Trying fallback %s for %d missing tickers", provider.name, len(missing))
+        fallback_result = _fetch_with_retry(provider, missing, start, end, interval)
+        for ticker, df in fallback_result.items():
+            result[ticker] = df
+        missing = [t for t in missing if t not in fallback_result]
+
+    return result
+
+
 def fetch_batch(
     tickers: list[str],
     start: date | None = None,
@@ -76,23 +105,23 @@ def fetch_batch(
         logger.error("No providers support interval=%s", interval)
         return {}
 
-    primary = eligible[0]
-    fallbacks = eligible[1:]
+    chunks = _chunked(tickers, BATCH_SIZE)
+    result: dict[str, pd.DataFrame] = {}
 
-    result = _fetch_with_retry(primary, tickers, start, end, interval)
-    logger.info("Primary provider %s returned %d/%d tickers", primary.name, len(result), len(tickers))
+    for i, chunk in enumerate(chunks):
+        if i > 0:
+            delay = random.uniform(*RETRY_DELAY_RANGE)
+            logger.info("Chunk %d/%d: sleeping %.1fs before next batch", i + 1, len(chunks), delay)
+            time.sleep(delay)
 
+        logger.info("Chunk %d/%d: fetching %d tickers", i + 1, len(chunks), len(chunk))
+        chunk_result = _fetch_chunk(chunk, start, end, interval, eligible)
+        result.update(chunk_result)
+
+    fetched = len(result)
     missing = [t for t in tickers if t not in result]
-    for provider in fallbacks:
-        if not missing:
-            break
-        logger.info("Trying fallback %s for %d missing tickers", provider.name, len(missing))
-        fallback_result = _fetch_with_retry(provider, missing, start, end, interval)
-        for ticker, df in fallback_result.items():
-            result[ticker] = df
-        missing = [t for t in missing if t not in fallback_result]
-
+    logger.info("Fetched %d/%d tickers total", fetched, len(tickers))
     if missing:
-        logger.warning("Still missing after all providers: %s", ", ".join(missing))
+        logger.warning("Still missing after all providers: %s", ", ".join(missing[:20]))
 
     return result

@@ -5,7 +5,7 @@ import logging
 import sys
 from datetime import date, timedelta
 
-from market_data.config import DEFAULT_TICKERS, LOOKBACK_DAYS, MIN_ROLLING_DAYS, VALID_INTERVALS
+from market_data.config import LOOKBACK_DAYS, MIN_ROLLING_DAYS, VALID_INTERVALS, get_tickers
 from market_data.fetcher import fetch_batch
 from market_data.logging_config import setup_logging
 from market_data.store import clean, last_date, save, status
@@ -15,19 +15,38 @@ from market_data import alerts as alerts_mod
 logger = logging.getLogger(__name__)
 
 
+def _filter_stale(tickers: list[str]) -> tuple[list[str], list[str]]:
+    today = date.today()
+    stale: list[str] = []
+    fresh: list[str] = []
+    for t in tickers:
+        ld = last_date(t)
+        if ld is None or (today - ld).days > 1:
+            stale.append(t)
+        else:
+            fresh.append(t)
+    return stale, fresh
+
+
 def cmd_fetch(args: argparse.Namespace) -> None:
-    tickers = args.tickers.split(",") if args.tickers else DEFAULT_TICKERS
+    tickers = args.tickers.split(",") if args.tickers else get_tickers()
     tickers = [t.strip() for t in tickers]
-
-    print(f"Fetching {len(tickers)} tickers: {', '.join(tickers)}")
-
-    rolling_start = date.today() - timedelta(days=MIN_ROLLING_DAYS)
 
     if args.full:
         start = date.today() - timedelta(days=LOOKBACK_DAYS)
-        print(f"Full fetch from {start}")
+        print(f"Full fetch: {len(tickers)} tickers from {start}")
         data = fetch_batch(tickers, start=start)
     else:
+        stale, fresh = _filter_stale(tickers)
+        if fresh:
+            print(f"Skipping {len(fresh)} up-to-date tickers")
+        if not stale:
+            print("All tickers are up-to-date. Nothing to fetch.")
+            return
+
+        tickers = stale
+        rolling_start = date.today() - timedelta(days=MIN_ROLLING_DAYS)
+
         starts: dict[str, date] = {}
         for ticker in tickers:
             ld = last_date(ticker)
@@ -37,7 +56,7 @@ def cmd_fetch(args: argparse.Namespace) -> None:
                 starts[ticker] = min(ld, rolling_start)
 
         earliest = min(starts.values())
-        print(f"Incremental fetch from {earliest} (rolling {MIN_ROLLING_DAYS}d)")
+        print(f"Fetching {len(tickers)} stale tickers from {earliest}")
         data = fetch_batch(tickers, start=earliest)
 
     if not data:
