@@ -50,6 +50,8 @@ from market_data.schemas import (
     PortfolioUpdateRequest,
     PriceUpdate,
     ReadyResponse,
+    SearchResponse,
+    SearchResult,
     TickerStatus,
     WatchlistAddRequest,
     WatchlistResponse,
@@ -655,6 +657,24 @@ async def export_ohlcv(
     )
 
 
+@v1.get("/search", response_model=SearchResponse)
+async def search_tickers(
+    q: str = Query(description="Search query for ticker symbol"),
+    limit: int = Query(default=10, ge=1, le=50),
+) -> SearchResponse:
+    if not q or q.strip() == "":
+        return SearchResponse(results=[], query=q)
+
+    all_tickers = await asyncio.to_thread(store.list_tickers)
+    search_term = q.upper().strip()
+    matching_tickers = [t for t in all_tickers if search_term in t]
+    matching_tickers.sort()
+    matched_limited = matching_tickers[:limit]
+
+    results = [SearchResult(ticker=t, has_data=True) for t in matched_limited]
+    return SearchResponse(results=results, query=q)
+
+
 app.include_router(v1)
 # Backward-compatible aliases: /api/* -> same handlers as /api/v1/*
 legacy = APIRouter(prefix="/api", tags=["legacy"])
@@ -675,4 +695,5 @@ legacy.add_api_route("/portfolio", add_to_portfolio, methods=["POST"])
 legacy.add_api_route("/portfolio/{ticker}", update_portfolio_holding, methods=["PUT"])
 legacy.add_api_route("/portfolio/{ticker}", delete_from_portfolio, methods=["DELETE"])
 legacy.add_api_route("/portfolio/summary", get_portfolio_summary, methods=["GET"])
+legacy.add_api_route("/search", search_tickers, methods=["GET"])
 app.include_router(legacy)

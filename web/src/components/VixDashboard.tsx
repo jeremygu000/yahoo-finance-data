@@ -95,7 +95,7 @@ export default function VixDashboard() {
       ro.disconnect();
       chart.remove();
     };
-  }, []);
+  }, [mode]);
 
   useEffect(() => {
     const theme = CHART_THEMES[mode];

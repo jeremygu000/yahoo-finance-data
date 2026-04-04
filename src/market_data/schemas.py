@@ -155,3 +155,13 @@ class PortfolioSummaryItem(BaseModel):
 
 class PortfolioSummaryResponse(BaseModel):
     holdings: list[PortfolioSummaryItem]
+
+
+class SearchResult(BaseModel):
+    ticker: str
+    has_data: bool
+
+
+class SearchResponse(BaseModel):
+    results: list[SearchResult]
+    query: str

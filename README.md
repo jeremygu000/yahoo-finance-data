@@ -25,9 +25,15 @@ Multi-source market data fetcher → Parquet storage → REST & WebSocket API �
 - **Watchlist** — Persistent user-defined ticker lists
 - **Interactive charts** — Candlestick (K-line), multi-ticker comparison, VIX dashboard
 - **Historical backfill** — CLI command to fetch arbitrary date ranges
+- **Technical indicators** — SMA, EMA, RSI, MACD, Bollinger Bands via API
+- **Portfolio tracking** — Holdings management with real-time P&L summary
+- **CSV export** — Download OHLCV data as CSV files
+- **Ticker search** — Autocomplete search across cached tickers
 - **Smart caching** — In-memory LRU cache with TTL for fast repeated queries
+- **Error recovery** — Exponential backoff with jitter for failed provider requests
+- **API authentication** — Optional API key protection (`MARKET_DATA_API_KEY`)
 - **Scheduled fetching** — macOS launchd integration for automatic daily updates
-- **Type-safe** — mypy strict, 151+ tests, full Pydantic schemas
+- **Type-safe** — mypy strict, 210+ tests, full Pydantic schemas
 
 ## Architecture
 
@@ -90,6 +96,10 @@ market-data alerts list                     # show all alerts
 market-data alerts add AAPL above 200       # trigger when AAPL > $200
 market-data alerts add QQQ percent_change_below -5  # trigger on -5% drop
 market-data alerts remove <alert-id>        # delete alert
+
+market-data portfolio list                  # show holdings
+market-data portfolio add AAPL --shares 10 --cost 150.0  # add holding
+market-data portfolio remove AAPL           # remove holding
 ```
 
 ## API
@@ -108,6 +118,14 @@ All endpoints are available under `/api/v1/` (and legacy `/api/` for backward co
 | `GET` | `/api/v1/alerts` | List price alerts |
 | `POST` | `/api/v1/alerts` | Create price alert |
 | `DELETE` | `/api/v1/alerts/{id}` | Delete price alert |
+| `GET` | `/api/v1/indicators/{ticker}?indicator=sma&period=20` | Technical indicators (sma, ema, rsi, macd, bollinger) |
+| `GET` | `/api/v1/export/{ticker}?format=csv&days=365` | Download OHLCV data as CSV |
+| `GET` | `/api/v1/search?q=AA&limit=10` | Search cached tickers |
+| `GET` | `/api/v1/portfolio` | List portfolio holdings |
+| `POST` | `/api/v1/portfolio` | Add holding (ticker, shares, avg_cost) |
+| `PUT` | `/api/v1/portfolio/{ticker}` | Update holding |
+| `DELETE` | `/api/v1/portfolio/{ticker}` | Remove holding |
+| `GET` | `/api/v1/portfolio/summary` | Portfolio with live P&L |
 | `WS` | `/ws/prices` | Real-time price updates + alert notifications |
 | `GET` | `/health` | Health check |
 | `GET` | `/docs` | Interactive API documentation (Swagger UI) |
@@ -148,6 +166,8 @@ Copy `.env.example` to `.env` and customize:
 | `MARKET_DATA_LOOKBACK_DAYS` | `365` | Default historical lookback |
 | `MARKET_DATA_CORS_ORIGINS` | `http://localhost:3000` | Allowed CORS origins |
 | `MARKET_DATA_WS_POLL_INTERVAL` | `30` | WebSocket price poll interval (seconds) |
+| `MARKET_DATA_API_KEY` | — | API key for authentication (optional, open access if unset) |
+| `MARKET_DATA_MAX_RETRIES` | `3` | Max retry attempts for failed provider requests |
 
 ## Scheduled Fetch (macOS)
 
@@ -168,11 +188,13 @@ market-terminal/
 │   ├── api.py               # get_ohlcv, get_latest, list_tickers
 │   ├── alerts.py            # price alert engine
 │   ├── cache.py             # LRU cache with TTL
-│   ├── cli.py               # CLI entry point (fetch, backfill, watchlist, alerts)
+│   ├── cli.py               # CLI entry point (fetch, backfill, watchlist, alerts, portfolio)
 │   ├── config.py            # env-configurable constants
 │   ├── exceptions.py        # custom exception hierarchy
-│   ├── fetcher.py           # multi-provider fetch with fallback
+│   ├── fetcher.py           # multi-provider fetch with fallback + retry
+│   ├── indicators.py        # technical indicators (SMA, EMA, RSI, MACD, Bollinger)
 │   ├── logging_config.py    # structured logging setup
+│   ├── portfolio.py         # portfolio holdings (JSON persistence)
 │   ├── schemas.py           # Pydantic request/response models
 │   ├── server.py            # FastAPI app + WebSocket + CORS
 │   ├── store.py             # Parquet read/write with interval support
@@ -187,10 +209,12 @@ market-terminal/
 │       ├── app/             # App Router pages
 │       ├── components/      # Chart, table, alert, sidebar components
 │       └── lib/             # API client, WebSocket hook, types
-├── tests/                   # 151+ tests (pytest)
+├── tests/                   # 210+ tests (pytest)
 ├── docker-compose.yml       # one-command deployment
 ├── Dockerfile               # backend container
 ├── .github/workflows/       # CI (pytest + mypy + pnpm build)
+├── CONTRIBUTING.md          # contribution guide
+├── CHANGELOG.md             # release history
 └── pyproject.toml
 ```
 
