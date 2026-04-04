@@ -14,6 +14,7 @@ RUN corepack enable
 WORKDIR /app
 
 COPY --from=deps /app/node_modules node_modules/
+COPY web/package.json ./
 COPY web/src/ src/
 COPY web/public/ public/
 COPY web/next.config.ts web/tsconfig.json web/postcss.config.mjs ./
