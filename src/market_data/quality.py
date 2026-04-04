@@ -310,7 +310,7 @@ def _expected_trading_days(start: date, end: date, exchange: str) -> set[date]:
     Tries exchange_calendars first; falls back to simple weekday heuristic.
     """
     try:
-        import exchange_calendars as xcals  # type: ignore[import-untyped]
+        import exchange_calendars as xcals  # type: ignore[import-not-found]
 
         cal = xcals.get_calendar(exchange)
         sessions = cal.sessions_in_range(
