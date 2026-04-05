@@ -107,7 +107,7 @@ class TestFetchAndSaveFundamentals:
         assert result["marketCap"] == 3_000_000_000_000
         assert "fetched_at" in result
 
-        path = tmp_path / "AAPL_fundamentals.parquet"
+        path = tmp_path / "fundamentals" / "AAPL_fundamentals.parquet"
         assert path.exists()
 
         loaded = fs.load_fundamentals("AAPL", data_dir=tmp_path)
@@ -122,7 +122,7 @@ class TestFetchAndSaveFundamentals:
         fs.fetch_and_save_fundamentals("AAPL", data_dir=tmp_path)
         fs.fetch_and_save_fundamentals("AAPL", data_dir=tmp_path)
 
-        df = pd.read_parquet(tmp_path / "AAPL_fundamentals.parquet")
+        df = pd.read_parquet(tmp_path / "fundamentals" / "AAPL_fundamentals.parquet")
         assert len(df) == 1
 
     def test_missing_keys_stored_as_none(self, mock_ticker_cls: MagicMock, tmp_path: Path) -> None:
@@ -238,10 +238,10 @@ class TestFetchAllFundamentalData:
         assert result["earnings_dates"] == 2
         assert result["upgrades_downgrades"] == 2
 
-        assert (tmp_path / "AAPL_fundamentals.parquet").exists()
-        assert (tmp_path / "AAPL_recommendations.parquet").exists()
-        assert (tmp_path / "AAPL_earnings_dates.parquet").exists()
-        assert (tmp_path / "AAPL_upgrades_downgrades.parquet").exists()
+        assert (tmp_path / "fundamentals" / "AAPL_fundamentals.parquet").exists()
+        assert (tmp_path / "fundamentals" / "AAPL_recommendations.parquet").exists()
+        assert (tmp_path / "fundamentals" / "AAPL_earnings_dates.parquet").exists()
+        assert (tmp_path / "fundamentals" / "AAPL_upgrades_downgrades.parquet").exists()
 
 
 class TestFundamentalsAPI:
@@ -404,3 +404,45 @@ class TestCLI:
         cmd_fetch(args)
 
         mock_fund.assert_called_once()
+
+
+class TestMigrateFundamentalsToSubdir:
+    def test_moves_fundamentals_files(self, tmp_path: Path) -> None:
+        for suffix in ("_fundamentals", "_recommendations", "_earnings_dates", "_upgrades_downgrades"):
+            (tmp_path / f"AAPL{suffix}.parquet").write_bytes(b"PAR1")
+
+        (tmp_path / "AAPL_1d.parquet").write_bytes(b"PAR1")
+
+        moved = fs.migrate_fundamentals_to_subdir(tmp_path)
+
+        assert moved == 4
+        dest = tmp_path / "fundamentals"
+        assert (dest / "AAPL_fundamentals.parquet").exists()
+        assert (dest / "AAPL_recommendations.parquet").exists()
+        assert (dest / "AAPL_earnings_dates.parquet").exists()
+        assert (dest / "AAPL_upgrades_downgrades.parquet").exists()
+        assert not (tmp_path / "AAPL_fundamentals.parquet").exists()
+        assert (tmp_path / "AAPL_1d.parquet").exists()
+
+    def test_noop_when_no_files(self, tmp_path: Path) -> None:
+        assert fs.migrate_fundamentals_to_subdir(tmp_path) == 0
+
+    def test_idempotent(self, tmp_path: Path) -> None:
+        (tmp_path / "AAPL_fundamentals.parquet").write_bytes(b"PAR1")
+
+        fs.migrate_fundamentals_to_subdir(tmp_path)
+        moved = fs.migrate_fundamentals_to_subdir(tmp_path)
+
+        assert moved == 0
+
+    def test_handles_existing_target(self, tmp_path: Path) -> None:
+        dest = tmp_path / "fundamentals"
+        dest.mkdir()
+        (dest / "AAPL_fundamentals.parquet").write_bytes(b"new")
+        (tmp_path / "AAPL_fundamentals.parquet").write_bytes(b"old")
+
+        moved = fs.migrate_fundamentals_to_subdir(tmp_path)
+
+        assert moved == 1
+        assert (dest / "AAPL_fundamentals.parquet").read_bytes() == b"new"
+        assert not (tmp_path / "AAPL_fundamentals.parquet").exists()

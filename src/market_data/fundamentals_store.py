@@ -1,10 +1,13 @@
 """Parquet persistence layer for fundamental data.
 
-Stores four types of data per ticker:
+Stores four types of data per ticker in DATA_DIR/fundamentals/:
 - {TICKER}_fundamentals.parquet  — scalar info snapshot (append, dedup by day)
 - {TICKER}_recommendations.parquet — analyst recommendation history
 - {TICKER}_earnings_dates.parquet — earnings dates with EPS
 - {TICKER}_upgrades_downgrades.parquet — analyst rating changes
+
+All files live in a ``fundamentals/`` subdirectory under DATA_DIR to keep
+them separate from OHLCV Parquet files (which DuckDB glob-scans).
 """
 
 from __future__ import annotations
@@ -88,24 +91,28 @@ _ALL_INFO_KEYS: list[str] = [
 ]
 
 
+def _fundamentals_dir(data_dir: Path = DATA_DIR) -> Path:
+    return data_dir / "fundamentals"
+
+
 def _fundamentals_path(ticker: str, data_dir: Path = DATA_DIR) -> Path:
     safe = validate_ticker(ticker)
-    return data_dir / f"{safe}_fundamentals.parquet"
+    return _fundamentals_dir(data_dir) / f"{safe}_fundamentals.parquet"
 
 
 def _recommendations_path(ticker: str, data_dir: Path = DATA_DIR) -> Path:
     safe = validate_ticker(ticker)
-    return data_dir / f"{safe}_recommendations.parquet"
+    return _fundamentals_dir(data_dir) / f"{safe}_recommendations.parquet"
 
 
 def _earnings_dates_path(ticker: str, data_dir: Path = DATA_DIR) -> Path:
     safe = validate_ticker(ticker)
-    return data_dir / f"{safe}_earnings_dates.parquet"
+    return _fundamentals_dir(data_dir) / f"{safe}_earnings_dates.parquet"
 
 
 def _upgrades_downgrades_path(ticker: str, data_dir: Path = DATA_DIR) -> Path:
     safe = validate_ticker(ticker)
-    return data_dir / f"{safe}_upgrades_downgrades.parquet"
+    return _fundamentals_dir(data_dir) / f"{safe}_upgrades_downgrades.parquet"
 
 
 def _atomic_write(df: pd.DataFrame, path: Path) -> None:
@@ -355,3 +362,43 @@ def load_upgrades_downgrades(ticker: str, data_dir: Path = DATA_DIR) -> pd.DataF
     if not path.exists():
         return pd.DataFrame()
     return pd.read_parquet(path)
+
+
+_FUNDAMENTALS_SUFFIXES = (
+    "_fundamentals.parquet",
+    "_recommendations.parquet",
+    "_earnings_dates.parquet",
+    "_upgrades_downgrades.parquet",
+)
+
+
+def migrate_fundamentals_to_subdir(data_dir: Path = DATA_DIR) -> int:
+    """Move legacy fundamentals files from *data_dir* into *data_dir*/fundamentals/.
+
+    Returns the number of files moved.  Safe to call repeatedly — skips files
+    that have already been migrated.
+    """
+    if not data_dir.exists():
+        return 0
+
+    dest = _fundamentals_dir(data_dir)
+    moved = 0
+
+    for p in sorted(data_dir.iterdir()):
+        if not p.is_file():
+            continue
+        name = p.name
+        if any(name.endswith(suffix) for suffix in _FUNDAMENTALS_SUFFIXES):
+            dest.mkdir(parents=True, exist_ok=True)
+            target = dest / name
+            if target.exists():
+                logger.info("migration: %s already exists in fundamentals/, removing old copy", name)
+                p.unlink()
+            else:
+                p.rename(target)
+                logger.info("migration: moved %s → fundamentals/", name)
+            moved += 1
+
+    if moved:
+        logger.info("migration: moved %d fundamentals file(s) to %s", moved, dest)
+    return moved

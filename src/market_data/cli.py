@@ -35,10 +35,11 @@ def _filter_stale(tickers: list[str]) -> tuple[list[str], list[str]]:
 
 
 def _has_fundamentals(ticker: str) -> bool:
+    from market_data.fundamentals_store import _fundamentals_dir
     from market_data.store import validate_ticker
 
     safe = validate_ticker(ticker)
-    return (DATA_DIR / f"{safe}_fundamentals.parquet").exists()
+    return (_fundamentals_dir(DATA_DIR) / f"{safe}_fundamentals.parquet").exists()
 
 
 _TICKER_DELAY_MIN = 3.0
@@ -466,6 +467,10 @@ def main() -> None:
 
     args = parser.parse_args()
     setup_logging(json_format=False, level=logging.DEBUG if args.verbose else logging.INFO)
+
+    from market_data.fundamentals_store import migrate_fundamentals_to_subdir
+
+    migrate_fundamentals_to_subdir()
 
     commands = {
         "fetch": cmd_fetch,

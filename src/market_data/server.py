@@ -126,6 +126,11 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 
     setup_logging(log_dir=LOG_DIR)
     DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+    from market_data.fundamentals_store import migrate_fundamentals_to_subdir
+
+    migrate_fundamentals_to_subdir()
+
     logger.info("server starting", extra={"path": str(DATA_DIR)})
     _price_task = asyncio.create_task(_poll_prices())
     _heartbeat_task = asyncio.create_task(_heartbeat())
