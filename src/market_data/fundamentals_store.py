@@ -21,7 +21,6 @@ import yfinance as yf
 from yfinance.exceptions import YFRateLimitError
 
 from market_data.config import DATA_DIR
-from market_data.rate_limiter import acquire, notify_success, yfinance_retry
 from market_data.store import validate_ticker
 
 logger = logging.getLogger(__name__)
@@ -140,7 +139,6 @@ def fetch_and_save_fundamentals(
     start = time.monotonic()
 
     try:
-        acquire()
         t = _ticker_obj or yf.Ticker(ticker)
         info: dict[str, Any] = t.info or {}
     except YFRateLimitError:
@@ -148,8 +146,6 @@ def fetch_and_save_fundamentals(
     except Exception:
         logger.warning("fundamentals fetch failed for %s", ticker, exc_info=True)
         return {}
-
-    notify_success()
 
     now = datetime.now(timezone.utc)
     row: dict[str, Any] = {"fetched_at": now}
@@ -191,7 +187,6 @@ def fetch_and_save_recommendations(
     """Fetch recommendations from yfinance and save/merge to Parquet. Returns row count."""
     data_dir.mkdir(parents=True, exist_ok=True)
     try:
-        acquire()
         t = _ticker_obj or yf.Ticker(ticker)
         df: pd.DataFrame | None = t.recommendations
     except YFRateLimitError:
@@ -199,8 +194,6 @@ def fetch_and_save_recommendations(
     except Exception:
         logger.warning("recommendations fetch failed for %s", ticker, exc_info=True)
         return 0
-
-    notify_success()
 
     if df is None or df.empty:
         logger.info("no recommendations data for %s", ticker)
@@ -228,7 +221,6 @@ def fetch_and_save_earnings_dates(
     """Fetch earnings dates from yfinance and save/merge to Parquet. Returns row count."""
     data_dir.mkdir(parents=True, exist_ok=True)
     try:
-        acquire()
         t = _ticker_obj or yf.Ticker(ticker)
         df: pd.DataFrame | None = t.earnings_dates
     except YFRateLimitError:
@@ -236,8 +228,6 @@ def fetch_and_save_earnings_dates(
     except Exception:
         logger.warning("earnings_dates fetch failed for %s", ticker, exc_info=True)
         return 0
-
-    notify_success()
 
     if df is None or df.empty:
         logger.info("no earnings_dates data for %s", ticker)
@@ -265,7 +255,6 @@ def fetch_and_save_upgrades_downgrades(
     """Fetch upgrades/downgrades from yfinance and save/merge to Parquet. Returns row count."""
     data_dir.mkdir(parents=True, exist_ok=True)
     try:
-        acquire()
         t = _ticker_obj or yf.Ticker(ticker)
         df: pd.DataFrame | None = t.upgrades_downgrades
     except YFRateLimitError:
@@ -273,8 +262,6 @@ def fetch_and_save_upgrades_downgrades(
     except Exception:
         logger.warning("upgrades_downgrades fetch failed for %s", ticker, exc_info=True)
         return 0
-
-    notify_success()
 
     if df is None or df.empty:
         logger.info("no upgrades_downgrades data for %s", ticker)
@@ -306,7 +293,6 @@ def fetch_all_fundamental_data(ticker: str, data_dir: Path = DATA_DIR) -> dict[s
     """
     result: dict[str, Any] = {"ticker": ticker.upper()}
 
-    acquire()
     t = yf.Ticker(ticker)
 
     fundamentals = fetch_and_save_fundamentals(ticker, data_dir, _ticker_obj=t)

@@ -96,10 +96,9 @@ def _mock_upgrades_downgrades() -> pd.DataFrame:
     )
 
 
-@patch("market_data.fundamentals_store.acquire")
+@patch("market_data.fundamentals_store.yf.Ticker")
 class TestFetchAndSaveFundamentals:
-    @patch("market_data.fundamentals_store.yf.Ticker")
-    def test_saves_and_loads(self, mock_ticker_cls: MagicMock, mock_acquire: MagicMock, tmp_path: Path) -> None:
+    def test_saves_and_loads(self, mock_ticker_cls: MagicMock, tmp_path: Path) -> None:
         mock_ticker_cls.return_value.info = _MOCK_INFO.copy()
 
         result = fs.fetch_and_save_fundamentals("AAPL", data_dir=tmp_path)
@@ -117,8 +116,7 @@ class TestFetchAndSaveFundamentals:
         assert loaded["marketCap"] == 3_000_000_000_000
         assert loaded["sector"] == "Technology"
 
-    @patch("market_data.fundamentals_store.yf.Ticker")
-    def test_dedup_by_day(self, mock_ticker_cls: MagicMock, mock_acquire: MagicMock, tmp_path: Path) -> None:
+    def test_dedup_by_day(self, mock_ticker_cls: MagicMock, tmp_path: Path) -> None:
         mock_ticker_cls.return_value.info = _MOCK_INFO.copy()
 
         fs.fetch_and_save_fundamentals("AAPL", data_dir=tmp_path)
@@ -127,10 +125,7 @@ class TestFetchAndSaveFundamentals:
         df = pd.read_parquet(tmp_path / "AAPL_fundamentals.parquet")
         assert len(df) == 1
 
-    @patch("market_data.fundamentals_store.yf.Ticker")
-    def test_missing_keys_stored_as_none(
-        self, mock_ticker_cls: MagicMock, mock_acquire: MagicMock, tmp_path: Path
-    ) -> None:
+    def test_missing_keys_stored_as_none(self, mock_ticker_cls: MagicMock, tmp_path: Path) -> None:
         mock_ticker_cls.return_value.info = {"shortName": "BTC"}
 
         fs.fetch_and_save_fundamentals("BTC-USD", data_dir=tmp_path)
@@ -141,24 +136,20 @@ class TestFetchAndSaveFundamentals:
         assert loaded["marketCap"] is None
         assert loaded["sector"] is None
 
-    @patch("market_data.fundamentals_store.yf.Ticker")
-    def test_yfinance_error_returns_empty(
-        self, mock_ticker_cls: MagicMock, mock_acquire: MagicMock, tmp_path: Path
-    ) -> None:
+    def test_yfinance_error_returns_empty(self, mock_ticker_cls: MagicMock, tmp_path: Path) -> None:
         mock_ticker_cls.side_effect = Exception("network error")
 
         result = fs.fetch_and_save_fundamentals("FAIL", data_dir=tmp_path)
         assert result == {}
 
-    def test_load_missing_returns_none(self, mock_acquire: MagicMock, tmp_path: Path) -> None:
+    def test_load_missing_returns_none(self, mock_ticker_cls: MagicMock, tmp_path: Path) -> None:
         loaded = fs.load_fundamentals("NONEXISTENT", data_dir=tmp_path)
         assert loaded is None
 
 
-@patch("market_data.fundamentals_store.acquire")
+@patch("market_data.fundamentals_store.yf.Ticker")
 class TestFetchAndSaveRecommendations:
-    @patch("market_data.fundamentals_store.yf.Ticker")
-    def test_saves_and_loads(self, mock_ticker_cls: MagicMock, mock_acquire: MagicMock, tmp_path: Path) -> None:
+    def test_saves_and_loads(self, mock_ticker_cls: MagicMock, tmp_path: Path) -> None:
         mock_ticker_cls.return_value.recommendations = _mock_recommendations()
 
         count = fs.fetch_and_save_recommendations("AAPL", data_dir=tmp_path)
@@ -169,8 +160,7 @@ class TestFetchAndSaveRecommendations:
         assert len(loaded) == 3
         assert "strongBuy" in loaded.columns
 
-    @patch("market_data.fundamentals_store.yf.Ticker")
-    def test_merge_dedup(self, mock_ticker_cls: MagicMock, mock_acquire: MagicMock, tmp_path: Path) -> None:
+    def test_merge_dedup(self, mock_ticker_cls: MagicMock, tmp_path: Path) -> None:
         mock_ticker_cls.return_value.recommendations = _mock_recommendations()
 
         fs.fetch_and_save_recommendations("AAPL", data_dir=tmp_path)
@@ -179,20 +169,18 @@ class TestFetchAndSaveRecommendations:
         loaded = fs.load_recommendations("AAPL", data_dir=tmp_path)
         assert len(loaded) == 3
 
-    @patch("market_data.fundamentals_store.yf.Ticker")
-    def test_none_returns_zero(self, mock_ticker_cls: MagicMock, mock_acquire: MagicMock, tmp_path: Path) -> None:
+    def test_none_returns_zero(self, mock_ticker_cls: MagicMock, tmp_path: Path) -> None:
         mock_ticker_cls.return_value.recommendations = None
         assert fs.fetch_and_save_recommendations("AAPL", data_dir=tmp_path) == 0
 
-    def test_load_missing_returns_empty(self, mock_acquire: MagicMock, tmp_path: Path) -> None:
+    def test_load_missing_returns_empty(self, mock_ticker_cls: MagicMock, tmp_path: Path) -> None:
         loaded = fs.load_recommendations("NONEXISTENT", data_dir=tmp_path)
         assert loaded.empty
 
 
-@patch("market_data.fundamentals_store.acquire")
+@patch("market_data.fundamentals_store.yf.Ticker")
 class TestFetchAndSaveEarningsDates:
-    @patch("market_data.fundamentals_store.yf.Ticker")
-    def test_saves_and_loads(self, mock_ticker_cls: MagicMock, mock_acquire: MagicMock, tmp_path: Path) -> None:
+    def test_saves_and_loads(self, mock_ticker_cls: MagicMock, tmp_path: Path) -> None:
         mock_ticker_cls.return_value.earnings_dates = _mock_earnings_dates()
 
         count = fs.fetch_and_save_earnings_dates("AAPL", data_dir=tmp_path)
@@ -203,20 +191,18 @@ class TestFetchAndSaveEarningsDates:
         assert len(loaded) == 2
         assert "EPS Estimate" in loaded.columns
 
-    @patch("market_data.fundamentals_store.yf.Ticker")
-    def test_none_returns_zero(self, mock_ticker_cls: MagicMock, mock_acquire: MagicMock, tmp_path: Path) -> None:
+    def test_none_returns_zero(self, mock_ticker_cls: MagicMock, tmp_path: Path) -> None:
         mock_ticker_cls.return_value.earnings_dates = None
         assert fs.fetch_and_save_earnings_dates("AAPL", data_dir=tmp_path) == 0
 
-    def test_load_missing_returns_empty(self, mock_acquire: MagicMock, tmp_path: Path) -> None:
+    def test_load_missing_returns_empty(self, mock_ticker_cls: MagicMock, tmp_path: Path) -> None:
         loaded = fs.load_earnings_dates("NONEXISTENT", data_dir=tmp_path)
         assert loaded.empty
 
 
-@patch("market_data.fundamentals_store.acquire")
+@patch("market_data.fundamentals_store.yf.Ticker")
 class TestFetchAndSaveUpgradesDowngrades:
-    @patch("market_data.fundamentals_store.yf.Ticker")
-    def test_saves_and_loads(self, mock_ticker_cls: MagicMock, mock_acquire: MagicMock, tmp_path: Path) -> None:
+    def test_saves_and_loads(self, mock_ticker_cls: MagicMock, tmp_path: Path) -> None:
         mock_ticker_cls.return_value.upgrades_downgrades = _mock_upgrades_downgrades()
 
         count = fs.fetch_and_save_upgrades_downgrades("AAPL", data_dir=tmp_path)
@@ -227,20 +213,18 @@ class TestFetchAndSaveUpgradesDowngrades:
         assert len(loaded) == 2
         assert "Firm" in loaded.columns
 
-    @patch("market_data.fundamentals_store.yf.Ticker")
-    def test_none_returns_zero(self, mock_ticker_cls: MagicMock, mock_acquire: MagicMock, tmp_path: Path) -> None:
+    def test_none_returns_zero(self, mock_ticker_cls: MagicMock, tmp_path: Path) -> None:
         mock_ticker_cls.return_value.upgrades_downgrades = None
         assert fs.fetch_and_save_upgrades_downgrades("AAPL", data_dir=tmp_path) == 0
 
-    def test_load_missing_returns_empty(self, mock_acquire: MagicMock, tmp_path: Path) -> None:
+    def test_load_missing_returns_empty(self, mock_ticker_cls: MagicMock, tmp_path: Path) -> None:
         loaded = fs.load_upgrades_downgrades("NONEXISTENT", data_dir=tmp_path)
         assert loaded.empty
 
 
 class TestFetchAllFundamentalData:
     @patch("market_data.fundamentals_store.yf.Ticker")
-    @patch("market_data.fundamentals_store.acquire")
-    def test_fetches_all_types(self, mock_acquire: MagicMock, mock_ticker_cls: MagicMock, tmp_path: Path) -> None:
+    def test_fetches_all_types(self, mock_ticker_cls: MagicMock, tmp_path: Path) -> None:
         inst = mock_ticker_cls.return_value
         inst.info = _MOCK_INFO.copy()
         inst.recommendations = _mock_recommendations()
@@ -365,9 +349,9 @@ class TestFundamentalsAPI:
 
 
 class TestCLI:
+    @patch("market_data.cli.time.sleep")
     @patch("market_data.fundamentals_store.yf.Ticker")
-    @patch("market_data.fundamentals_store.acquire")
-    def test_cmd_fetch_fundamentals(self, mock_acquire: MagicMock, mock_ticker_cls: MagicMock, tmp_path: Path) -> None:
+    def test_cmd_fetch_fundamentals(self, mock_ticker_cls: MagicMock, mock_sleep: MagicMock, tmp_path: Path) -> None:
         import argparse
 
         from market_data.cli import cmd_fetch_fundamentals

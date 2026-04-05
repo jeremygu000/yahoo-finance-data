@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import random
 import sys
 import time
 from datetime import date, timedelta
@@ -40,16 +41,13 @@ def _has_fundamentals(ticker: str) -> bool:
     return (DATA_DIR / f"{safe}_fundamentals.parquet").exists()
 
 
-_BATCH_PAUSE_EVERY = 30
-_BATCH_PAUSE_SECONDS = 10
-_RATE_LIMIT_BASE_WAIT = 60
-_RATE_LIMIT_MAX_RETRIES = 3
+_TICKER_DELAY_MIN = 3.0
+_TICKER_DELAY_MAX = 6.0
+_COOLDOWN_ON_429 = 300
 
 
 def _fetch_fundamentals_for(tickers: list[str], *, force: bool = False) -> None:
     from yfinance.exceptions import YFRateLimitError
-
-    from market_data.rate_limiter import notify_rate_limit
 
     if not force:
         pending = [t for t in tickers if not _has_fundamentals(t)]
@@ -70,12 +68,27 @@ def _fetch_fundamentals_for(tickers: list[str], *, force: bool = False) -> None:
     failed_tickers: list[str] = []
 
     for i, ticker in enumerate(pending, 1):
-        if i > 1 and (i - 1) % _BATCH_PAUSE_EVERY == 0:
-            print(f"  -- batch pause {_BATCH_PAUSE_SECONDS}s after {i - 1} tickers --")
-            time.sleep(_BATCH_PAUSE_SECONDS)
+        if i > 1:
+            delay = random.uniform(_TICKER_DELAY_MIN, _TICKER_DELAY_MAX)
+            time.sleep(delay)
 
-        retries = 0
-        while True:
+        try:
+            result = fetch_all_fundamental_data(ticker)
+            parts = []
+            if result.get("fundamentals"):
+                parts.append("info")
+            if result.get("recommendations"):
+                parts.append(f"recs={result['recommendations']}")
+            if result.get("earnings_dates"):
+                parts.append(f"earnings={result['earnings_dates']}")
+            if result.get("upgrades_downgrades"):
+                parts.append(f"upgrades={result['upgrades_downgrades']}")
+            summary = ", ".join(parts) if parts else "no data"
+            print(f"  [{i}/{len(pending)}] {ticker}: {summary}")
+            succeeded += 1
+        except YFRateLimitError:
+            print(f"  [{i}/{len(pending)}] {ticker}: rate-limited, cooling down {_COOLDOWN_ON_429}s...")
+            time.sleep(_COOLDOWN_ON_429)
             try:
                 result = fetch_all_fundamental_data(ticker)
                 parts = []
@@ -88,28 +101,18 @@ def _fetch_fundamentals_for(tickers: list[str], *, force: bool = False) -> None:
                 if result.get("upgrades_downgrades"):
                     parts.append(f"upgrades={result['upgrades_downgrades']}")
                 summary = ", ".join(parts) if parts else "no data"
-                print(f"  [{i}/{len(pending)}] {ticker}: {summary}")
+                print(f"  [{i}/{len(pending)}] {ticker}: {summary} (after cooldown)")
                 succeeded += 1
-                break
-            except YFRateLimitError:
-                retries += 1
-                if retries > _RATE_LIMIT_MAX_RETRIES:
-                    print(f"  [{i}/{len(pending)}] {ticker}: FAILED after {retries} rate-limit retries")
-                    failed += 1
-                    failed_tickers.append(ticker)
-                    break
-                wait = _RATE_LIMIT_BASE_WAIT * (2 ** (retries - 1))
-                notify_rate_limit()
-                print(
-                    f"  [{i}/{len(pending)}] {ticker}: rate-limited, retry {retries}/{_RATE_LIMIT_MAX_RETRIES} in {wait}s..."
-                )
-                time.sleep(wait)
             except Exception:
-                logger.warning("Unexpected error fetching %s", ticker, exc_info=True)
-                print(f"  [{i}/{len(pending)}] {ticker}: FAILED (unexpected error)")
+                logger.warning("Failed after cooldown for %s", ticker, exc_info=True)
+                print(f"  [{i}/{len(pending)}] {ticker}: FAILED after cooldown")
                 failed += 1
                 failed_tickers.append(ticker)
-                break
+        except Exception:
+            logger.warning("Unexpected error fetching %s", ticker, exc_info=True)
+            print(f"  [{i}/{len(pending)}] {ticker}: FAILED (unexpected error)")
+            failed += 1
+            failed_tickers.append(ticker)
 
     print(f"\nFundamentals fetch complete: {succeeded} ok, {skipped} skipped, {failed} failed")
     if failed_tickers:
