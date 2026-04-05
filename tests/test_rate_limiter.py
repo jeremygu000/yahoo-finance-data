@@ -8,7 +8,10 @@ from market_data.rate_limiter import (
     YFinanceEmptyDownloadError,
     acquire,
     get_limiter,
+    notify_rate_limit,
+    notify_success,
     reset_limiter,
+    reset_throttle,
     yfinance_retry,
 )
 from yfinance.exceptions import YFRateLimitError
@@ -84,7 +87,8 @@ class TestYfinanceRetry:
         assert ok() == "done"
         assert call_count == 1
 
-    def test_no_retry_on_rate_limit(self) -> None:
+    @patch("tenacity.nap.time.sleep")
+    def test_retries_on_rate_limit(self, mock_sleep: MagicMock) -> None:
         call_count = 0
 
         @yfinance_retry
@@ -95,9 +99,10 @@ class TestYfinanceRetry:
 
         with pytest.raises(YFRateLimitError):
             rate_limited()
-        assert call_count == 1
+        assert call_count == 4  # 1 initial + 3 retries (MAX_RETRIES=3)
 
-    def test_no_retry_on_empty_download(self) -> None:
+    @patch("tenacity.nap.time.sleep")
+    def test_retries_on_empty_download(self, mock_sleep: MagicMock) -> None:
         call_count = 0
 
         @yfinance_retry
@@ -108,4 +113,34 @@ class TestYfinanceRetry:
 
         with pytest.raises(YFinanceEmptyDownloadError):
             empty_dl()
-        assert call_count == 1
+        assert call_count == 4  # 1 initial + 3 retries
+
+
+class TestAdaptiveThrottle:
+    def setup_method(self) -> None:
+        reset_throttle()
+
+    def teardown_method(self) -> None:
+        reset_throttle()
+
+    def test_notify_rate_limit_increases_delay(self) -> None:
+        d1 = notify_rate_limit()
+        assert d1 == 5.0
+        d2 = notify_rate_limit()
+        assert d2 == 10.0
+        d3 = notify_rate_limit()
+        assert d3 == 20.0
+
+    def test_notify_success_decays_delay(self) -> None:
+        notify_rate_limit()
+        notify_rate_limit()
+        notify_success()
+        d = notify_rate_limit()
+        assert d == 10.0
+
+    def test_throttle_caps_at_max(self) -> None:
+        for _ in range(20):
+            notify_rate_limit()
+        from market_data.rate_limiter import get_extra_delay
+
+        assert get_extra_delay() <= 120.0

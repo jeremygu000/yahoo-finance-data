@@ -3,9 +3,11 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
+import time
 from datetime import date, timedelta
+from pathlib import Path
 
-from market_data.config import LOOKBACK_DAYS, MIN_ROLLING_DAYS, VALID_INTERVALS, get_tickers
+from market_data.config import DATA_DIR, LOOKBACK_DAYS, MIN_ROLLING_DAYS, VALID_INTERVALS, get_tickers
 from market_data.fetcher import fetch_batch
 from market_data.fundamentals_store import fetch_all_fundamental_data
 from market_data.logging_config import setup_logging
@@ -31,22 +33,88 @@ def _filter_stale(tickers: list[str]) -> tuple[list[str], list[str]]:
     return stale, fresh
 
 
-def _fetch_fundamentals_for(tickers: list[str]) -> None:
-    print(f"\nFetching fundamentals for {len(tickers)} tickers...")
-    for i, ticker in enumerate(tickers, 1):
-        result = fetch_all_fundamental_data(ticker)
-        parts = []
-        if result.get("fundamentals"):
-            parts.append("info")
-        if result.get("recommendations"):
-            parts.append(f"recs={result['recommendations']}")
-        if result.get("earnings_dates"):
-            parts.append(f"earnings={result['earnings_dates']}")
-        if result.get("upgrades_downgrades"):
-            parts.append(f"upgrades={result['upgrades_downgrades']}")
-        summary = ", ".join(parts) if parts else "no data"
-        print(f"  [{i}/{len(tickers)}] {ticker}: {summary}")
-    print("Fundamentals fetch complete.")
+def _has_fundamentals(ticker: str) -> bool:
+    from market_data.store import validate_ticker
+
+    safe = validate_ticker(ticker)
+    return (DATA_DIR / f"{safe}_fundamentals.parquet").exists()
+
+
+_BATCH_PAUSE_EVERY = 30
+_BATCH_PAUSE_SECONDS = 10
+_RATE_LIMIT_BASE_WAIT = 60
+_RATE_LIMIT_MAX_RETRIES = 3
+
+
+def _fetch_fundamentals_for(tickers: list[str], *, force: bool = False) -> None:
+    from yfinance.exceptions import YFRateLimitError
+
+    from market_data.rate_limiter import notify_rate_limit
+
+    if not force:
+        pending = [t for t in tickers if not _has_fundamentals(t)]
+        skipped = len(tickers) - len(pending)
+        if skipped:
+            print(f"Skipping {skipped} tickers with existing fundamentals (use --force to re-fetch)")
+    else:
+        pending = list(tickers)
+        skipped = 0
+
+    if not pending:
+        print("All tickers already have fundamentals. Nothing to fetch.")
+        return
+
+    print(f"\nFetching fundamentals for {len(pending)} tickers...")
+    succeeded = 0
+    failed = 0
+    failed_tickers: list[str] = []
+
+    for i, ticker in enumerate(pending, 1):
+        if i > 1 and (i - 1) % _BATCH_PAUSE_EVERY == 0:
+            print(f"  -- batch pause {_BATCH_PAUSE_SECONDS}s after {i - 1} tickers --")
+            time.sleep(_BATCH_PAUSE_SECONDS)
+
+        retries = 0
+        while True:
+            try:
+                result = fetch_all_fundamental_data(ticker)
+                parts = []
+                if result.get("fundamentals"):
+                    parts.append("info")
+                if result.get("recommendations"):
+                    parts.append(f"recs={result['recommendations']}")
+                if result.get("earnings_dates"):
+                    parts.append(f"earnings={result['earnings_dates']}")
+                if result.get("upgrades_downgrades"):
+                    parts.append(f"upgrades={result['upgrades_downgrades']}")
+                summary = ", ".join(parts) if parts else "no data"
+                print(f"  [{i}/{len(pending)}] {ticker}: {summary}")
+                succeeded += 1
+                break
+            except YFRateLimitError:
+                retries += 1
+                if retries > _RATE_LIMIT_MAX_RETRIES:
+                    print(f"  [{i}/{len(pending)}] {ticker}: FAILED after {retries} rate-limit retries")
+                    failed += 1
+                    failed_tickers.append(ticker)
+                    break
+                wait = _RATE_LIMIT_BASE_WAIT * (2 ** (retries - 1))
+                notify_rate_limit()
+                print(
+                    f"  [{i}/{len(pending)}] {ticker}: rate-limited, retry {retries}/{_RATE_LIMIT_MAX_RETRIES} in {wait}s..."
+                )
+                time.sleep(wait)
+            except Exception:
+                logger.warning("Unexpected error fetching %s", ticker, exc_info=True)
+                print(f"  [{i}/{len(pending)}] {ticker}: FAILED (unexpected error)")
+                failed += 1
+                failed_tickers.append(ticker)
+                break
+
+    print(f"\nFundamentals fetch complete: {succeeded} ok, {skipped} skipped, {failed} failed")
+    if failed_tickers:
+        print(f"Failed tickers: {', '.join(failed_tickers)}")
+        print(f"Retry with: uv run market-data fetch-fundamentals --tickers {','.join(failed_tickers)}")
 
 
 def cmd_fetch(args: argparse.Namespace) -> None:
@@ -137,7 +205,7 @@ def cmd_clean(args: argparse.Namespace) -> None:
 def cmd_fetch_fundamentals(args: argparse.Namespace) -> None:
     tickers = args.tickers.split(",") if args.tickers else get_tickers()
     tickers = [t.strip() for t in tickers]
-    _fetch_fundamentals_for(tickers)
+    _fetch_fundamentals_for(tickers, force=args.force)
 
 
 def cmd_backfill(args: argparse.Namespace) -> None:
@@ -320,6 +388,7 @@ def main() -> None:
 
     p_fetch_fund = sub.add_parser("fetch-fundamentals", help="Fetch fundamental data for tickers")
     p_fetch_fund.add_argument("--tickers", type=str, help="Comma-separated ticker list (default: watchlist)")
+    p_fetch_fund.add_argument("--force", action="store_true", help="Re-fetch even if fundamentals already exist")
 
     sub.add_parser("status", help="Show cached data status")
 

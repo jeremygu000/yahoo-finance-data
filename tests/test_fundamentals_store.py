@@ -378,7 +378,7 @@ class TestCLI:
         inst.earnings_dates = _mock_earnings_dates()
         inst.upgrades_downgrades = _mock_upgrades_downgrades()
 
-        args = argparse.Namespace(tickers="AAPL,MSFT")
+        args = argparse.Namespace(tickers="AAPL,MSFT", force=True)
         cmd_fetch_fundamentals(args)
 
         assert mock_ticker_cls.call_count >= 2
