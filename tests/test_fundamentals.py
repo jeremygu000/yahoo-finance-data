@@ -148,7 +148,7 @@ class TestAPIEndpoint:
 
         with _patch("market_data.fundamentals.get_fundamentals", return_value=mock_result):
             client = TestClient(app)
-            resp = client.get("/api/v1/fundamentals/AAPL")
+            resp = client.get("/api/v1/fundamentals/AAPL?source=live")
             assert resp.status_code == 200
             data = resp.json()
             assert data["ticker"] == "AAPL"

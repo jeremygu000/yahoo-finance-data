@@ -1,15 +1,13 @@
 from __future__ import annotations
 
 import logging
-import random
-import time
 from datetime import date, timedelta
 
 import pandas as pd
 import yfinance as yf
 
-from market_data.config import MAX_RETRIES, RETRY_DELAY_RANGE
 from market_data.providers.base import OHLCV_COLUMNS, MarketDataProvider
+from market_data.rate_limiter import YFinanceEmptyDownloadError, acquire, yfinance_retry
 
 logger = logging.getLogger(__name__)
 
@@ -26,60 +24,44 @@ class YFinanceProvider(MarketDataProvider):
     def is_available(self) -> bool:
         return True
 
+    @yfinance_retry
     def fetch_ohlcv(self, ticker: str, start: date, end: date, interval: str = "1d") -> pd.DataFrame:
+        acquire()
         end_inclusive = end + timedelta(days=1)
-        for attempt in range(1, MAX_RETRIES + 1):
-            try:
-                raw: pd.DataFrame = yf.download(
-                    tickers=[ticker],
-                    start=start.isoformat(),
-                    end=end_inclusive.isoformat(),
-                    interval=interval,
-                    group_by="ticker",
-                    threads=False,
-                    repair=True,
-                    progress=False,
-                )
-                break
-            except Exception:
-                logger.warning("yfinance attempt %d/%d failed for %s", attempt, MAX_RETRIES, ticker)
-                if attempt < MAX_RETRIES:
-                    time.sleep(random.uniform(*RETRY_DELAY_RANGE))
-                else:
-                    logger.error("All %d yfinance attempts failed for %s", MAX_RETRIES, ticker)
-                    return pd.DataFrame()
-
+        raw: pd.DataFrame = yf.download(
+            tickers=[ticker],
+            start=start.isoformat(),
+            end=end_inclusive.isoformat(),
+            interval=interval,
+            group_by="ticker",
+            threads=False,
+            repair=True,
+            progress=False,
+        )
+        if raw.empty:
+            raise YFinanceEmptyDownloadError(f"yf.download returned no data for {ticker}")
         return _normalize(raw)
 
+    @yfinance_retry
     def fetch_batch(self, tickers: list[str], start: date, end: date, interval: str = "1d") -> dict[str, pd.DataFrame]:
         if not tickers:
             return {}
 
+        acquire(len(tickers))
         end_inclusive = end + timedelta(days=1)
-
-        for attempt in range(1, MAX_RETRIES + 1):
-            try:
-                raw: pd.DataFrame = yf.download(
-                    tickers=tickers,
-                    start=start.isoformat(),
-                    end=end_inclusive.isoformat(),
-                    interval=interval,
-                    group_by="ticker",
-                    threads=True,
-                    repair=True,
-                    progress=False,
-                )
-                break
-            except Exception:
-                logger.warning("yfinance batch attempt %d/%d failed", attempt, MAX_RETRIES)
-                if attempt < MAX_RETRIES:
-                    time.sleep(random.uniform(*RETRY_DELAY_RANGE))
-                else:
-                    logger.error("All %d yfinance batch attempts failed", MAX_RETRIES)
-                    return {}
+        raw: pd.DataFrame = yf.download(
+            tickers=tickers,
+            start=start.isoformat(),
+            end=end_inclusive.isoformat(),
+            interval=interval,
+            group_by="ticker",
+            threads=True,
+            repair=True,
+            progress=False,
+        )
 
         if raw.empty:
-            return {}
+            raise YFinanceEmptyDownloadError(f"yf.download returned no data for {len(tickers)} tickers")
 
         result: dict[str, pd.DataFrame] = {}
         has_multiindex = isinstance(raw.columns, pd.MultiIndex)

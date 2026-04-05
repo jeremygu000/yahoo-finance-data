@@ -8,6 +8,7 @@ import pytest
 
 from market_data.providers.base import OHLCV_COLUMNS
 from market_data.providers.yfinance import YFinanceProvider, _normalize
+from market_data.rate_limiter import YFinanceEmptyDownloadError
 from market_data.providers.tiingo import TiingoProvider, _normalize_tiingo
 from market_data.providers.fmp import FMPProvider, _normalize_fmp
 from market_data.providers import get_provider, get_fallback_chain
@@ -129,14 +130,15 @@ class TestNormalizeFMP:
         assert _normalize_fmp(df).empty
 
 
+@patch("market_data.providers.yfinance.acquire")
 class TestYFinanceProvider:
-    def test_name(self) -> None:
+    def test_name(self, mock_acquire: MagicMock) -> None:
         assert YFinanceProvider().name == "yfinance"
 
-    def test_always_available(self) -> None:
+    def test_always_available(self, mock_acquire: MagicMock) -> None:
         assert YFinanceProvider().is_available()
 
-    def test_supported_intervals(self) -> None:
+    def test_supported_intervals(self, mock_acquire: MagicMock) -> None:
         intervals = YFinanceProvider().supported_intervals
         assert "1d" in intervals
         assert "1h" in intervals
@@ -144,7 +146,7 @@ class TestYFinanceProvider:
         assert "5m" in intervals
 
     @patch("market_data.providers.yfinance.yf.download")
-    def test_fetch_ohlcv(self, mock_dl: MagicMock) -> None:
+    def test_fetch_ohlcv(self, mock_dl: MagicMock, mock_acquire: MagicMock) -> None:
         mock_dl.return_value = _make_raw_ohlcv()
         provider = YFinanceProvider()
         result = provider.fetch_ohlcv("AAPL", date(2024, 1, 1), date(2024, 12, 31))
@@ -152,7 +154,7 @@ class TestYFinanceProvider:
         assert list(result.columns) == OHLCV_COLUMNS
 
     @patch("market_data.providers.yfinance.yf.download")
-    def test_fetch_ohlcv_with_interval(self, mock_dl: MagicMock) -> None:
+    def test_fetch_ohlcv_with_interval(self, mock_dl: MagicMock, mock_acquire: MagicMock) -> None:
         mock_dl.return_value = _make_raw_ohlcv()
         provider = YFinanceProvider()
         result = provider.fetch_ohlcv("AAPL", date(2024, 1, 1), date(2024, 12, 31), interval="1h")
@@ -160,13 +162,35 @@ class TestYFinanceProvider:
         call_kwargs = mock_dl.call_args[1]
         assert call_kwargs["interval"] == "1h"
 
+    @patch("tenacity.nap.time.sleep")
     @patch("market_data.providers.yfinance.yf.download")
-    def test_fetch_ohlcv_all_retries_fail(self, mock_dl: MagicMock) -> None:
+    def test_fetch_ohlcv_all_retries_fail(
+        self, mock_dl: MagicMock, mock_sleep: MagicMock, mock_acquire: MagicMock
+    ) -> None:
         mock_dl.side_effect = Exception("Network error")
         provider = YFinanceProvider()
-        with patch("market_data.providers.yfinance.time.sleep"):
-            result = provider.fetch_ohlcv("AAPL", date(2024, 1, 1), date(2024, 12, 31))
-        assert result.empty
+        with pytest.raises(Exception, match="Network error"):
+            provider.fetch_ohlcv("AAPL", date(2024, 1, 1), date(2024, 12, 31))
+
+    @patch("tenacity.nap.time.sleep")
+    @patch("market_data.providers.yfinance.yf.download")
+    def test_fetch_ohlcv_empty_download_raises(
+        self, mock_dl: MagicMock, mock_sleep: MagicMock, mock_acquire: MagicMock
+    ) -> None:
+        mock_dl.return_value = pd.DataFrame()
+        provider = YFinanceProvider()
+        with pytest.raises(YFinanceEmptyDownloadError):
+            provider.fetch_ohlcv("AAPL", date(2024, 1, 1), date(2024, 12, 31))
+
+    @patch("tenacity.nap.time.sleep")
+    @patch("market_data.providers.yfinance.yf.download")
+    def test_fetch_batch_empty_download_raises(
+        self, mock_dl: MagicMock, mock_sleep: MagicMock, mock_acquire: MagicMock
+    ) -> None:
+        mock_dl.return_value = pd.DataFrame()
+        provider = YFinanceProvider()
+        with pytest.raises(YFinanceEmptyDownloadError):
+            provider.fetch_batch(["AAPL", "MSFT"], date(2024, 1, 1), date(2024, 12, 31))
 
 
 class TestTiingoProvider:

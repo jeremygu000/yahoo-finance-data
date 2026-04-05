@@ -20,9 +20,19 @@ import pandas as pd
 import yfinance as yf
 
 from market_data.config import DATA_DIR
+from market_data.rate_limiter import acquire, yfinance_retry
 from market_data.store import validate_ticker
 
 logger = logging.getLogger(__name__)
+
+
+def _strip_tz(df: pd.DataFrame) -> pd.DataFrame:
+    """Remove timezone info from DatetimeIndex if present."""
+    idx = df.index
+    if isinstance(idx, pd.DatetimeIndex) and idx.tz is not None:
+        df.index = idx.tz_localize(None)
+    return df
+
 
 _ALL_INFO_KEYS: list[str] = [
     # Valuation
@@ -123,6 +133,7 @@ def fetch_and_save_fundamentals(ticker: str, data_dir: Path = DATA_DIR) -> dict[
     start = time.monotonic()
 
     try:
+        acquire()
         t = yf.Ticker(ticker)
         info: dict[str, Any] = t.info or {}
     except Exception:
@@ -167,6 +178,7 @@ def fetch_and_save_recommendations(ticker: str, data_dir: Path = DATA_DIR) -> in
     """Fetch recommendations from yfinance and save/merge to Parquet. Returns row count."""
     data_dir.mkdir(parents=True, exist_ok=True)
     try:
+        acquire()
         t = yf.Ticker(ticker)
         df: pd.DataFrame | None = t.recommendations
     except Exception:
@@ -177,12 +189,14 @@ def fetch_and_save_recommendations(ticker: str, data_dir: Path = DATA_DIR) -> in
         logger.info("no recommendations data for %s", ticker)
         return 0
 
+    df = df.reset_index(drop=True)
     path = _recommendations_path(ticker, data_dir)
     if path.exists():
-        existing = pd.read_parquet(path)
-        combined = pd.concat([existing, df])
-        combined = combined[~combined.index.duplicated(keep="last")]
-        combined.sort_index(inplace=True)
+        existing = pd.read_parquet(path).reset_index(drop=True)
+        combined = pd.concat([existing, df], ignore_index=True)
+        if "period" in combined.columns:
+            combined = combined.drop_duplicates(subset=["period"], keep="last")
+            combined = combined.reset_index(drop=True)
     else:
         combined = df
 
@@ -195,6 +209,7 @@ def fetch_and_save_earnings_dates(ticker: str, data_dir: Path = DATA_DIR) -> int
     """Fetch earnings dates from yfinance and save/merge to Parquet. Returns row count."""
     data_dir.mkdir(parents=True, exist_ok=True)
     try:
+        acquire()
         t = yf.Ticker(ticker)
         df: pd.DataFrame | None = t.earnings_dates
     except Exception:
@@ -205,9 +220,11 @@ def fetch_and_save_earnings_dates(ticker: str, data_dir: Path = DATA_DIR) -> int
         logger.info("no earnings_dates data for %s", ticker)
         return 0
 
+    _strip_tz(df)
     path = _earnings_dates_path(ticker, data_dir)
     if path.exists():
         existing = pd.read_parquet(path)
+        _strip_tz(existing)
         combined = pd.concat([existing, df])
         combined = combined[~combined.index.duplicated(keep="last")]
         combined.sort_index(inplace=True)
@@ -223,6 +240,7 @@ def fetch_and_save_upgrades_downgrades(ticker: str, data_dir: Path = DATA_DIR) -
     """Fetch upgrades/downgrades from yfinance and save/merge to Parquet. Returns row count."""
     data_dir.mkdir(parents=True, exist_ok=True)
     try:
+        acquire()
         t = yf.Ticker(ticker)
         df: pd.DataFrame | None = t.upgrades_downgrades
     except Exception:
@@ -233,9 +251,11 @@ def fetch_and_save_upgrades_downgrades(ticker: str, data_dir: Path = DATA_DIR) -
         logger.info("no upgrades_downgrades data for %s", ticker)
         return 0
 
+    _strip_tz(df)
     path = _upgrades_downgrades_path(ticker, data_dir)
     if path.exists():
         existing = pd.read_parquet(path)
+        _strip_tz(existing)
         combined = pd.concat([existing, df])
         combined = combined[~combined.index.duplicated(keep="last")]
         combined.sort_index(inplace=True)
@@ -247,7 +267,7 @@ def fetch_and_save_upgrades_downgrades(ticker: str, data_dir: Path = DATA_DIR) -
     return len(combined)
 
 
-def fetch_all_fundamental_data(ticker: str, data_dir: Path = DATA_DIR, delay: float = 0.5) -> dict[str, Any]:
+def fetch_all_fundamental_data(ticker: str, data_dir: Path = DATA_DIR) -> dict[str, Any]:
     """Fetch all fundamental data types for a ticker.
 
     Returns a summary dict with counts for each type.
@@ -257,13 +277,10 @@ def fetch_all_fundamental_data(ticker: str, data_dir: Path = DATA_DIR, delay: fl
     fundamentals = fetch_and_save_fundamentals(ticker, data_dir)
     result["fundamentals"] = bool(fundamentals)
 
-    time.sleep(delay)
     result["recommendations"] = fetch_and_save_recommendations(ticker, data_dir)
 
-    time.sleep(delay)
     result["earnings_dates"] = fetch_and_save_earnings_dates(ticker, data_dir)
 
-    time.sleep(delay)
     result["upgrades_downgrades"] = fetch_and_save_upgrades_downgrades(ticker, data_dir)
 
     return result

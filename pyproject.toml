@@ -16,6 +16,9 @@ dependencies = [
     "scipy>=1.17.1",
     "python-telegram-bot>=22.7",
     "aiosmtplib>=5.1.0",
+    "tenacity>=9.1.4",
+    "pyrate-limiter>=4.1.0",
+    "lxml>=6.0.2",
 ]
 
 [project.scripts]

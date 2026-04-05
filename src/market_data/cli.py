@@ -12,6 +12,7 @@ from market_data.logging_config import setup_logging
 from market_data.store import clean, last_date, save, status
 from market_data.watchlist import add_ticker, list_tickers, remove_ticker
 from market_data import alerts as alerts_mod
+from market_data import portfolio as portfolio_mod
 from market_data import quality as quality_mod
 
 logger = logging.getLogger(__name__)
@@ -217,6 +218,29 @@ def cmd_alert_remove(args: argparse.Namespace) -> None:
     print(f"Alert {args.id} removed.")
 
 
+def cmd_portfolio_list(_args: argparse.Namespace) -> None:
+    holdings = portfolio_mod.list_holdings()
+    if not holdings:
+        print("Portfolio is empty.")
+    else:
+        print(f"{'Ticker':<10} {'Shares':>10} {'Avg Cost':>12} {'Added At':>30}")
+        print("-" * 66)
+        for h in holdings:
+            print(f"{h.ticker:<10} {h.shares:>10.4f} {h.avg_cost:>12.4f} {h.added_at:>30}")
+
+
+def cmd_portfolio_add(args: argparse.Namespace) -> None:
+    p = portfolio_mod.add_holding(args.ticker, args.shares, args.cost)
+    tickers = [h.ticker for h in p.holdings]
+    print(f"Added {args.ticker.upper()}. Portfolio: {tickers}")
+
+
+def cmd_portfolio_remove(args: argparse.Namespace) -> None:
+    p = portfolio_mod.remove_holding(args.ticker)
+    tickers = [h.ticker for h in p.holdings]
+    print(f"Removed {args.ticker.upper()}. Portfolio: {tickers}")
+
+
 def cmd_quality(args: argparse.Namespace) -> None:
     stale_days: int = args.stale_days
     zscore: float = args.zscore
@@ -358,6 +382,16 @@ def main() -> None:
         help="Data interval for gap/outlier checks (default 1d)",
     )
 
+    sub.add_parser("portfolio", help="List portfolio holdings")
+
+    p_portfolio_add = sub.add_parser("portfolio-add", help="Add a holding to the portfolio")
+    p_portfolio_add.add_argument("ticker", type=str, help="Ticker symbol (e.g. AAPL)")
+    p_portfolio_add.add_argument("--shares", type=float, required=True, help="Number of shares")
+    p_portfolio_add.add_argument("--cost", type=float, required=True, help="Average cost per share")
+
+    p_portfolio_remove = sub.add_parser("portfolio-remove", help="Remove a holding from the portfolio")
+    p_portfolio_remove.add_argument("ticker", type=str, help="Ticker symbol to remove")
+
     args = parser.parse_args()
     setup_logging(json_format=False, level=logging.DEBUG if args.verbose else logging.INFO)
 
@@ -374,6 +408,9 @@ def main() -> None:
         "alert-add": cmd_alert_add,
         "alert-remove": cmd_alert_remove,
         "quality": cmd_quality,
+        "portfolio": cmd_portfolio_list,
+        "portfolio-add": cmd_portfolio_add,
+        "portfolio-remove": cmd_portfolio_remove,
     }
 
     handler = commands.get(args.command)
