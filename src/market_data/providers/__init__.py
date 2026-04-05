@@ -6,6 +6,7 @@ import os
 from market_data.providers.base import MarketDataProvider, OHLCV_COLUMNS
 from market_data.providers.fmp import FMPProvider
 from market_data.providers.tiingo import TiingoProvider
+from market_data.providers.twelvedata import TwelvedataProvider
 from market_data.providers.yfinance import YFinanceProvider
 
 __all__ = ["get_provider", "get_fallback_chain", "MarketDataProvider", "OHLCV_COLUMNS"]
@@ -16,9 +17,10 @@ _PROVIDERS: dict[str, type[MarketDataProvider]] = {
     "yfinance": YFinanceProvider,
     "tiingo": TiingoProvider,
     "fmp": FMPProvider,
+    "twelvedata": TwelvedataProvider,
 }
 
-_DEFAULT_CHAIN = ["yfinance", "tiingo", "fmp"]
+_DEFAULT_CHAIN = ["yfinance", "tiingo", "fmp", "twelvedata"]
 
 
 def get_provider(name: str | None = None) -> MarketDataProvider:

@@ -571,6 +571,8 @@ SMTP_PASSWORD: str | None = os.environ.get("SMTP_PASSWORD")
 SMTP_FROM: str | None = os.environ.get("SMTP_FROM")
 
 # --- AI / Ollama ---
+TWELVEDATA_API_KEY: str | None = os.environ.get("TWELVEDATA_API_KEY")
+
 OLLAMA_HOST: str = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
 OLLAMA_MODEL: str = os.environ.get("OLLAMA_MODEL", "qwen3:32b")
 OLLAMA_TIMEOUT: int = int(os.environ.get("OLLAMA_TIMEOUT", "180"))
